@@ -1,0 +1,339 @@
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
+import { getDistanceKm } from '../utils/fare'
+
+const STATUS_LABELS = {
+  searching: { text: 'Finding your driver', color: 'var(--warning)', icon: '🔍' },
+  driver_assigned: { text: 'Driver on the way', color: 'var(--green)', icon: '🛺' },
+  otp_verified: { text: 'OTP Verified — Boarding', color: 'var(--green)', icon: '✅' },
+  in_progress: { text: 'On the way', color: 'var(--green)', icon: '🚀' },
+  completed: { text: 'Ride completed', color: 'var(--text-secondary)', icon: '🏁' },
+  cancelled: { text: 'Cancelled', color: 'var(--danger)', icon: '❌' },
+}
+
+export default function StudentRideActive() {
+  const { rideId } = useParams()
+  const { profile } = useAuth()
+  const navigate = useNavigate()
+  const [ride, setRide] = useState(null)
+  const [driver, setDriver] = useState(null)
+  const [driverDetails, setDriverDetails] = useState(null)
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const mapRef = useRef(null)
+  const leafletMap = useRef(null)
+  const markersRef = useRef({})
+  const routeRef = useRef(null)
+  const searchTimer = useRef(null)
+  const [searchPhase, setSearchPhase] = useState(1)
+  const [eta, setEta] = useState(null)
+
+  useEffect(() => {
+    fetchRide()
+    const sub = supabase
+      .channel(`ride-${rideId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
+        (payload) => handleRideUpdate(payload.new)
+      )
+      .subscribe()
+
+    return () => { sub.unsubscribe(); clearTimeout(searchTimer.current) }
+  }, [rideId])
+
+  useEffect(() => {
+    if (driver) {
+      // Subscribe to driver location updates
+      const sub = supabase
+        .channel(`driver-loc-${driver.id}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'driver_details', filter: `id=eq.${driver.id}` },
+          (payload) => {
+            updateDriverMarker(payload.new.current_lat, payload.new.current_lng)
+          }
+        )
+        .subscribe()
+      return () => sub.unsubscribe()
+    }
+  }, [driver])
+
+  useEffect(() => {
+    // Load Leaflet map
+    if (!mapRef.current || leafletMap.current) return
+    const L = window.L
+    leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false })
+      .setView([19.133, 72.913], 15)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(leafletMap.current)
+    L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current)
+    setMapLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (mapLoaded && ride) updateMap()
+  }, [mapLoaded, ride, driver, driverDetails])
+
+  async function fetchRide() {
+    const { data } = await supabase.from('rides').select('*').eq('id', rideId).single()
+    if (data) {
+      setRide(data)
+      if (data.driver_id) fetchDriver(data.driver_id)
+      if (data.status === 'searching') startSearchExpansion()
+      if (data.status === 'completed' || data.status === 'cancelled') {
+        setTimeout(() => navigate('/'), 3000)
+      }
+    }
+  }
+
+  async function handleRideUpdate(newRide) {
+    setRide(newRide)
+    if (newRide.driver_id && !driver) fetchDriver(newRide.driver_id)
+    if (newRide.status === 'completed' || newRide.status === 'cancelled') {
+      setTimeout(() => navigate('/'), 3000)
+    }
+  }
+
+  async function fetchDriver(driverId) {
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', driverId).single()
+    const { data: d } = await supabase.from('driver_details').select('*').eq('id', driverId).single()
+    setDriver(p)
+    setDriverDetails(d)
+    if (d?.current_lat && d?.current_lng) {
+      const dist = getDistanceKm(d.current_lat, d.current_lng, ride?.pickup_lat, ride?.pickup_lng)
+      setEta(Math.max(1, Math.round(dist / 0.25))) // ~15 km/h
+    }
+  }
+
+  function startSearchExpansion() {
+    // Every 30s expand search radius
+    searchTimer.current = setTimeout(async () => {
+      const { data: currentRide } = await supabase.from('rides').select('status, search_radius_km').eq('id', rideId).single()
+      if (currentRide?.status !== 'searching') return
+      
+      const newRadius = (currentRide.search_radius_km || 1) + 1
+      setSearchPhase(p => p + 1)
+      
+      if (newRadius <= 5) {
+        await supabase.from('rides').update({ search_radius_km: newRadius }).eq('id', rideId)
+        await expandDriverSearch(newRadius)
+        startSearchExpansion()
+      }
+    }, 30000)
+  }
+
+  async function expandDriverSearch(radius) {
+    const rideData = ride
+    if (!rideData) return
+    const { data: drivers } = await supabase
+      .from('driver_details')
+      .select('*, profiles!inner(id)')
+      .eq('is_available', true)
+      .not('current_lat', 'is', null)
+
+    const nearbyDrivers = drivers?.filter(d => {
+      const dist = getDistanceKm(rideData.pickup_lat, rideData.pickup_lng, d.current_lat, d.current_lng)
+      return dist <= radius && dist > radius - 1
+    })
+
+    if (nearbyDrivers?.length) {
+      const existingRequests = await supabase.from('ride_requests').select('driver_id').eq('ride_id', rideId)
+      const existingIds = existingRequests.data?.map(r => r.driver_id) || []
+      const newDrivers = nearbyDrivers.filter(d => !existingIds.includes(d.profiles.id))
+      
+      if (newDrivers.length) {
+        await supabase.from('ride_requests').insert(newDrivers.map(d => ({
+          ride_id: rideId, driver_id: d.profiles.id, status: 'pending'
+        })))
+      }
+    }
+  }
+
+  function updateDriverMarker(lat, lng) {
+    if (!leafletMap.current) return
+    const L = window.L
+    const pos = [lat, lng]
+    
+    if (markersRef.current.driver) {
+      markersRef.current.driver.setLatLng(pos)
+    } else {
+      markersRef.current.driver = L.marker(pos, {
+        icon: L.divIcon({
+          html: `<div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))">🛺</div>`,
+          iconSize: [30, 30], iconAnchor: [15, 15], className: ''
+        })
+      }).addTo(leafletMap.current)
+    }
+    if (ride) {
+      const dist = getDistanceKm(lat, lng, ride.pickup_lat, ride.pickup_lng)
+      setEta(Math.max(1, Math.round(dist / 0.25)))
+    }
+  }
+
+  function updateMap() {
+    if (!leafletMap.current) return
+    const L = window.L
+    const map = leafletMap.current
+
+    const makeIcon = (emoji, size = 30) => L.divIcon({
+      html: `<div style="font-size:${size}px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6))">${emoji}</div>`,
+      iconSize: [size, size], iconAnchor: [size/2, size], className: ''
+    })
+
+    if (ride?.pickup_lat && !markersRef.current.pickup) {
+      markersRef.current.pickup = L.marker([ride.pickup_lat, ride.pickup_lng], { icon: makeIcon('📍') })
+        .addTo(map).bindPopup('Pickup: ' + ride.pickup_address)
+    }
+    if (ride?.drop_lat && !markersRef.current.drop) {
+      markersRef.current.drop = L.marker([ride.drop_lat, ride.drop_lng], { icon: makeIcon('🏁') })
+        .addTo(map).bindPopup('Drop: ' + ride.drop_address)
+    }
+    if (driverDetails?.current_lat) {
+      updateDriverMarker(driverDetails.current_lat, driverDetails.current_lng)
+    }
+
+    const points = [
+      driverDetails?.current_lat ? [driverDetails.current_lat, driverDetails.current_lng] : null,
+      ride?.pickup_lat ? [ride.pickup_lat, ride.pickup_lng] : null,
+      ['in_progress', 'otp_verified'].includes(ride?.status) ? [ride.drop_lat, ride.drop_lng] : null
+    ].filter(Boolean)
+
+    if (points.length > 0) map.fitBounds(points.length === 1 ? L.latLngBounds([points[0], points[0]]).pad(0.01) : points, { padding: [50, 50], maxZoom: 16 })
+  }
+
+  async function cancelRide() {
+    await supabase.from('rides').update({ status: 'cancelled' }).eq('id', rideId)
+    navigate('/')
+  }
+
+  const status = STATUS_LABELS[ride?.status] || STATUS_LABELS.searching
+
+  return (
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+      {/* Map */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
+        
+        {/* Status overlay */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          padding: '16px',
+          paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
+          background: 'linear-gradient(to bottom, rgba(8,11,10,0.9) 0%, transparent 100%)',
+          display: 'flex', alignItems: 'center', gap: '12px'
+        }}>
+          <button onClick={() => navigate('/')} style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: '50%', width: '36px', height: '36px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" strokeWidth="2">
+              <path d="M19 12H5M12 5l-7 7 7 7"/>
+            </svg>
+          </button>
+          <div style={{
+            flex: 1,
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            padding: '10px 14px',
+            display: 'flex', alignItems: 'center', gap: '10px'
+          }}>
+            <span style={{ fontSize: '20px' }}>{status.icon}</span>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: '600', color: status.color }}>{status.text}</div>
+              {ride?.status === 'searching' && (
+                <div className="caption">Phase {searchPhase} · expanding search...</div>
+              )}
+              {eta && ['driver_assigned'].includes(ride?.status) && (
+                <div className="caption">ETA: ~{eta} min</div>
+              )}
+            </div>
+            {ride?.status === 'searching' && (
+              <div className="spinner" style={{ marginLeft: 'auto' }}/>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom panel */}
+      <div style={{
+        background: 'var(--bg-card)',
+        borderTop: '1px solid var(--border)',
+        borderRadius: '24px 24px 0 0',
+        padding: '8px 20px',
+        paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+        maxHeight: '55vh',
+        overflow: 'auto'
+      }}>
+        <div style={{ width: '36px', height: '4px', background: 'var(--border)', borderRadius: '2px', margin: '8px auto 16px' }}/>
+
+        {/* OTP — always show */}
+        <div className="card card-green" style={{ marginBottom: '16px', textAlign: 'center' }}>
+          <div className="label" style={{ color: 'var(--green)', marginBottom: '4px' }}>Your OTP</div>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: '44px', fontWeight: '800',
+            letterSpacing: '14px', color: 'var(--green)',
+            textShadow: '0 0 24px rgba(0,200,83,0.5)'
+          }}>{profile?.otp_pin}</div>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Driver will enter this to verify your identity
+          </p>
+        </div>
+
+        {/* Ride details */}
+        <div className="card" style={{ marginBottom: '12px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '3px' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)' }}/>
+              <div style={{ width: '1px', height: '28px', background: 'var(--border)' }}/>
+              <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: 'var(--danger)' }}/>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '14px', marginBottom: '10px' }}>{ride?.pickup_address?.split(',').slice(0, 2).join(',')}</div>
+              <div style={{ fontSize: '14px' }}>{ride?.drop_address?.split(',').slice(0, 2).join(',')}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', color: 'var(--green)' }}>
+                ₹{ride?.fare?.toFixed(0)}
+              </div>
+              <div className="caption">{ride?.distance_km?.toFixed(1)} km</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Driver info */}
+        {driver && (
+          <div className="card" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '44px', height: '44px', borderRadius: '50%',
+              background: 'var(--green-subtle)', border: '2px solid var(--border-green)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '20px', flexShrink: 0
+            }}>🛺</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: '600', marginBottom: '2px' }}>{driver.full_name}</div>
+              <div className="caption">{driverDetails?.vehicle_number}</div>
+            </div>
+            {eta && <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: '700', color: 'var(--green)', fontSize: '18px' }}>{eta}</div>
+              <div className="caption">min away</div>
+            </div>}
+          </div>
+        )}
+
+        {ride?.status === 'completed' && (
+          <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--green)' }}>
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎉</div>
+            <div className="title">Ride Complete!</div>
+            <div className="caption" style={{ marginTop: '4px' }}>Redirecting you home...</div>
+          </div>
+        )}
+
+        {/* Cancel */}
+        {['searching', 'driver_assigned'].includes(ride?.status) && (
+          <button className="btn btn-danger" onClick={cancelRide} style={{ marginTop: '4px' }}>
+            Cancel Ride
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
