@@ -9,29 +9,80 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
+    let mounted = true
+
+    // Hard timeout — if nothing resolves in 5s, stop loading regardless
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('Auth timeout hit — forcing loading=false')
+        setLoading(false)
+      }
+    }, 5000)
+
+    async function init() {
+      try {
+        console.log('Auth init started')
+        const { data: { session }, error } = await supabase.auth.getSession()
+        console.log('getSession result:', session?.user?.email ?? 'no session', error ?? '')
+
+        if (!mounted) return
+
+        if (session?.user) {
+          setUser(session.user)
+          await fetchProfile(session.user.id, mounted)
+        } else {
+          setLoading(false)
+        }
+      } catch (e) {
+        console.error('Auth init error:', e)
+        if (mounted) setLoading(false)
+      } finally {
+        clearTimeout(timeout)
+      }
+    }
+
+    init()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event, session?.user?.email ?? 'no user')
+      if (!mounted) return
+
+      if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+      } else if (event === 'SIGNED_IN') {
+        setUser(session.user)
+        await fetchProfile(session.user.id, mounted)
+      }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) await fetchProfile(session.user.id)
-      else { setProfile(null); setLoading(false) }
-    })
-
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      clearTimeout(timeout)
+      subscription.unsubscribe()
+    }
   }, [])
 
-  async function fetchProfile(userId) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    setProfile(data)
-    setLoading(false)
+  async function fetchProfile(userId, mounted = true) {
+    try {
+      console.log('Fetching profile for:', userId)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      console.log('Profile result:', data, error)
+
+      if (!mounted) return
+      setProfile(data ?? null)
+    } catch (e) {
+      console.error('fetchProfile error:', e)
+      if (mounted) setProfile(null)
+    } finally {
+      if (mounted) setLoading(false)
+    }
   }
 
   async function signInWithGoogle() {
@@ -39,7 +90,7 @@ export function AuthProvider({ children }) {
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
-        // queryParams: { hd: 'iitb.ac.in' } // restrict to IITB emails
+        // queryParams: { hd: 'iitb.ac.in' } -- re-enable for production
       }
     })
   }
@@ -50,11 +101,10 @@ export function AuthProvider({ children }) {
     setProfile(null)
   }
 
-  // Called after first Google login to set role
   async function createProfile(role) {
     if (!user) return
-    const otp = role === 'student' 
-      ? String(Math.floor(1000 + Math.random() * 9000)) 
+    const otp = role === 'student'
+      ? String(Math.floor(1000 + Math.random() * 9000))
       : null
 
     const { data, error } = await supabase.from('profiles').insert({
@@ -80,7 +130,11 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, signOut, createProfile, refetchProfile: () => fetchProfile(user?.id) }}>
+    <AuthContext.Provider value={{
+      user, profile, loading,
+      signInWithGoogle, signOut, createProfile,
+      refetchProfile: () => fetchProfile(user?.id)
+    }}>
       {children}
     </AuthContext.Provider>
   )
