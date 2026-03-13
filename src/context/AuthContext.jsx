@@ -9,79 +9,41 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth event:', event, session?.user?.email ?? 'no session')
 
-    // Hard timeout — if nothing resolves in 5s, stop loading regardless
-    const timeout = setTimeout(() => {
-      if (mounted) {
-        console.warn('Auth timeout hit — forcing loading=false')
-        setLoading(false)
-      }
-    }, 5000)
-
-    async function init() {
-      try {
-        console.log('Auth init started')
-        const { data: { session }, error } = await supabase.auth.getSession()
-        console.log('getSession result:', session?.user?.email ?? 'no session', error ?? '')
-
-        if (!mounted) return
-
-        if (session?.user) {
-          setUser(session.user)
-          await fetchProfile(session.user.id, mounted)
-        } else {
-          setLoading(false)
-        }
-      } catch (e) {
-        console.error('Auth init error:', e)
-        if (mounted) setLoading(false)
-      } finally {
-        clearTimeout(timeout)
-      }
-    }
-
-    init()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth event:', event, session?.user?.email ?? 'no user')
-      if (!mounted) return
-
-      if (event === 'SIGNED_OUT') {
+      // Handle all events that provide a session
+      if (session?.user) {
+        setUser(session.user)
+        // setTimeout avoids Supabase internal lock deadlock
+        setTimeout(() => fetchProfile(session.user.id), 0)
+      } else {
+        // SIGNED_OUT or no session
         setUser(null)
         setProfile(null)
         setLoading(false)
-      } else if (event === 'SIGNED_IN') {
-        setUser(session.user)
-        await fetchProfile(session.user.id, mounted)
       }
     })
 
-    return () => {
-      mounted = false
-      clearTimeout(timeout)
-      subscription.unsubscribe()
-    }
+    return () => subscription.unsubscribe()
   }, [])
 
-  async function fetchProfile(userId, mounted = true) {
+  async function fetchProfile(userId) {
+    console.log('Fetching profile for:', userId)
     try {
-      console.log('Fetching profile for:', userId)
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle() // maybeSingle returns null instead of 406 when no row found
 
-      console.log('Profile result:', data, error)
-
-      if (!mounted) return
+      console.log('Profile result:', data, error?.message)
       setProfile(data ?? null)
     } catch (e) {
-      console.error('fetchProfile error:', e)
-      if (mounted) setProfile(null)
+      console.error('fetchProfile threw:', e)
+      setProfile(null)
     } finally {
-      if (mounted) setLoading(false)
+      setLoading(false)
     }
   }
 
