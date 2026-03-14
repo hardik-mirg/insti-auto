@@ -74,52 +74,71 @@ function toRad(deg) {
 
 // Accurate IITB campus locations with verified coordinates
 export const IITB_LOCATIONS = [
+  // ==========================================
   // Gates
-  { name: 'Main Gate (Gate 1)', lat: 19.1334, lng: 72.9133, category: 'Gate' },
-  { name: 'Gate 2 (Vihar Road)', lat: 19.1462, lng: 72.9154, category: 'Gate' },
-  { name: 'Gate 3', lat: 19.1384, lng: 72.9074, category: 'Gate' },
+  // ==========================================
+  { name: 'Main Gate (Gate 1)', lat: 19.125616, lng: 72.916119, category: 'Gate' },
+  { name: 'Gate 2 (Vihar Road)', lat: 19.126200, lng: 72.915400, category: 'Gate' },
+  { name: 'Gate 3', lat: 19.138400, lng: 72.907400, category: 'Gate' },
+  { name: 'Y-Point Gate', lat: 19.129146, lng: 72.918957, category: 'Gate' },
+  { name: 'KV Gate', lat: 19.140500, lng: 72.916100, category: 'Gate' },
 
+  // ==========================================
   // Hostels
-  { name: 'Hostel 1', lat: 19.1321, lng: 72.9155, category: 'Hostel' },
-  { name: 'Hostel 2', lat: 19.1329, lng: 72.9163, category: 'Hostel' },
-  { name: 'Hostel 3', lat: 19.1338, lng: 72.9170, category: 'Hostel' },
-  { name: 'Hostel 4', lat: 19.1346, lng: 72.9163, category: 'Hostel' },
-  { name: 'Hostel 5', lat: 19.1304, lng: 72.9168, category: 'Hostel' },
-  { name: 'Hostel 6', lat: 19.1296, lng: 72.9160, category: 'Hostel' },
-  { name: 'Hostel 7', lat: 19.1288, lng: 72.9153, category: 'Hostel' },
-  { name: 'Hostel 8', lat: 19.1280, lng: 72.9145, category: 'Hostel' },
-  { name: 'Hostel 9', lat: 19.1355, lng: 72.9181, category: 'Hostel' },
-  { name: 'Hostel 10', lat: 19.1363, lng: 72.9174, category: 'Hostel' },
-  { name: 'Hostel 11', lat: 19.1371, lng: 72.9167, category: 'Hostel' },
-  { name: 'Hostel 12', lat: 19.1379, lng: 72.9160, category: 'Hostel' },
-  { name: 'Hostel 13', lat: 19.1387, lng: 72.9153, category: 'Hostel' },
-  { name: 'Hostel 14', lat: 19.1395, lng: 72.9146, category: 'Hostel' },
-  { name: 'Hostel 15', lat: 19.1403, lng: 72.9139, category: 'Hostel' },
-  { name: 'Hostel 16', lat: 19.1308, lng: 72.9108, category: 'Hostel' },
-  { name: 'Hostel 17 (Udaygiri)', lat: 19.1270, lng: 72.9138, category: 'Hostel' },
-  { name: 'Hostel 18 (Ambikaniketan)', lat: 19.1265, lng: 72.9128, category: 'Hostel' },
-  { name: 'Hostel 19 (Gulmohar)', lat: 19.1258, lng: 72.9118, category: 'Hostel' },
-  { name: 'Hostel 20 (Alaknanda)', lat: 19.1260, lng: 72.9108, category: 'Hostel' },
-  { name: 'Hostel 21 (Tapti)', lat: 19.1268, lng: 72.9098, category: 'Hostel' },
-  { name: 'Tansa House (PG)', lat: 19.1350, lng: 72.9120, category: 'Hostel' },
+  // ==========================================
+  { name: 'Hostel 1', lat: 19.136289, lng: 72.914273, category: 'Hostel' },
+  { name: 'Hostel 2', lat: 19.135971, lng: 72.912534, category: 'Hostel' },
+  { name: 'Hostel 3', lat: 19.136386, lng: 72.911287, category: 'Hostel' },
+  { name: 'Hostel 4', lat: 19.135500, lng: 72.910500, category: 'Hostel' },
+  { name: 'Hostel 5', lat: 19.134900, lng: 72.909600, category: 'Hostel' },
+  { name: 'Hostel 6', lat: 19.134300, lng: 72.909000, category: 'Hostel' },
+  { name: 'Hostel 7', lat: 19.133800, lng: 72.908500, category: 'Hostel' },
+  { name: 'Hostel 8', lat: 19.134800, lng: 72.907500, category: 'Hostel' },
+  { name: 'Hostel 9', lat: 19.135783, lng: 72.908401, category: 'Hostel' },
+  { name: 'Hostel 10', lat: 19.128894, lng: 72.915800, category: 'Hostel' },
+  { name: 'Hostel 11', lat: 19.128400, lng: 72.916200, category: 'Hostel' },
+  { name: 'Hostel 12', lat: 19.135534, lng: 72.905740, category: 'Hostel' },
+  { name: 'Hostel 13', lat: 19.134212, lng: 72.904765, category: 'Hostel' },
+  { name: 'Hostel 14', lat: 19.133500, lng: 72.904000, category: 'Hostel' },
+  { name: 'Hostel 15', lat: 19.137420, lng: 72.914014, category: 'Hostel' },
+  { name: 'Hostel 16', lat: 19.137546, lng: 72.912789, category: 'Hostel' },
+  { name: 'Hostel 17 (Udaygiri)', lat: 19.138000, lng: 72.911000, category: 'Hostel' },
+  { name: 'Hostel 18 (Ambikaniketan)', lat: 19.138500, lng: 72.912000, category: 'Hostel' },
+  { name: 'Hostel 19 (Gulmohar)', lat: 19.129798, lng: 72.915160, category: 'Hostel' },
+  { name: 'Hostel 20 (Alaknanda)', lat: 19.138200, lng: 72.911500, category: 'Hostel' },
+  { name: 'Hostel 21 (Tapti)', lat: 19.137000, lng: 72.911000, category: 'Hostel' },
+  { name: 'Tansa House (PG)', lat: 19.133400, lng: 72.917000, category: 'Hostel' },
 
+  // ==========================================
   // Academic
-  { name: 'Main Building', lat: 19.1330, lng: 72.9155, category: 'Academic' },
-  { name: 'Convocation Hall', lat: 19.1325, lng: 72.9148, category: 'Academic' },
-  { name: 'Central Library', lat: 19.1340, lng: 72.9160, category: 'Academic' },
-  { name: 'Victor Menezes Convention Centre (VMCC)', lat: 19.1318, lng: 72.9140, category: 'Academic' },
-  { name: 'Department of CSE', lat: 19.1348, lng: 72.9145, category: 'Academic' },
-  { name: 'Department of EE', lat: 19.1355, lng: 72.9138, category: 'Academic' },
-  { name: 'Department of Mechanical', lat: 19.1362, lng: 72.9131, category: 'Academic' },
-  { name: 'Lecture Hall Complex (LHC)', lat: 19.1335, lng: 72.9140, category: 'Academic' },
-
+  // ==========================================
+  { name: 'Main Building', lat: 19.132789, lng: 72.915144, category: 'Academic' },
+  { name: 'Convocation Hall', lat: 19.131944, lng: 72.914367, category: 'Academic' },
+  { name: 'Central Library', lat: 19.134169, lng: 72.915159, category: 'Academic' },
+  { name: 'Victor Menezes Convention Centre (VMCC)', lat: 19.131100, lng: 72.915200, category: 'Academic' },
+  { name: 'Department of CSE', lat: 19.131028, lng: 72.915912, category: 'Academic' },
+  { name: 'Department of EE', lat: 19.131974, lng: 72.917301, category: 'Academic' },
+  { name: 'Department of Mechanical', lat: 19.133358, lng: 72.916431, category: 'Academic' },
+  { name: 'Lecture Hall Complex (LHC)', lat: 19.132282, lng: 72.915830, category: 'Academic' },
+  { name: 'Shailesh J. Mehta School of Management (SJMSOM)', lat: 19.131702, lng: 72.915738, category: 'Academic' },
+  { name: 'Industrial Design Centre (IDC)', lat: 19.133383, lng: 72.917177, category: 'Academic' },
+  { name: 'Department of Aerospace Engineering', lat: 19.131210, lng: 72.918557, category: 'Academic' },
+  { name: 'Mathematics Department', lat: 19.134074, lng: 72.915818, category: 'Academic' },
+  { name: 'Center of Systems and Control Engineering (SysCon)', lat: 19.134730, lng: 72.915729, category: 'Academic' },
+  { name: 'C.S.R.E', lat: 19.132146, lng: 72.917733, category: 'Academic' },
+  
+  // ==========================================
   // Facilities
-  { name: 'SAC (Student Activity Centre)', lat: 19.1313, lng: 72.9131, category: 'Facility' },
-  { name: 'Gymkhana Ground', lat: 19.1302, lng: 72.9143, category: 'Facility' },
-  { name: 'Swimming Pool', lat: 19.1295, lng: 72.9135, category: 'Facility' },
-  { name: 'Hospital (Health Centre)', lat: 19.1345, lng: 72.9125, category: 'Facility' },
-  { name: 'IIT Market', lat: 19.1358, lng: 72.9120, category: 'Facility' },
-  { name: 'Himalaya Canteen', lat: 19.1367, lng: 72.9128, category: 'Facility' },
-  { name: 'New SAC', lat: 19.1320, lng: 72.9125, category: 'Facility' },
-  { name: 'Staff Colony', lat: 19.1410, lng: 72.9110, category: 'Facility' },
-]
+  // ==========================================
+  { name: 'SAC (Student Activity Centre)', lat: 19.134764, lng: 72.913459, category: 'Facility' },
+  { name: 'Gymkhana Ground', lat: 19.135271, lng: 72.911678, category: 'Facility' },
+  { name: 'Swimming Pool', lat: 19.135000, lng: 72.912000, category: 'Facility' },
+  { name: 'Hospital (Health Centre)', lat: 19.126500, lng: 72.916200, category: 'Facility' },
+  { name: 'IIT Market', lat: 19.124000, lng: 72.918000, category: 'Facility' },
+  { name: 'Himalaya Canteen', lat: 19.129800, lng: 72.916000, category: 'Facility' },
+  { name: 'New SAC', lat: 19.134800, lng: 72.913000, category: 'Facility' },
+  { name: 'Staff Colony', lat: 19.141000, lng: 72.911000, category: 'Facility' },
+  { name: 'State Bank of India (SBI)', lat: 19.125150, lng: 72.916294, category: 'Facility' },
+  { name: 'Campus School', lat: 19.127758, lng: 72.918043, category: 'Facility' },
+  { name: 'VanVihar Guest House', lat: 19.129856, lng: 72.914735, category: 'Facility' }
+];
