@@ -18,6 +18,7 @@ export default function DriverRideActive() {
   const markersRef = useRef({})
   const routeRef = useRef(null)
   const routeDebounce = useRef(null)
+  const mapFitted = useRef(false)
   const locationInterval = useRef(null)
   const otpRefs = [useRef(), useRef(), useRef(), useRef()]
 
@@ -37,6 +38,7 @@ export default function DriverRideActive() {
           // When OTP verified, remove student marker, show drop, reroute to drop
           if (['otp_verified', 'in_progress'].includes(updated.status)) {
             removeStudentMarker()
+            mapFitted.current = false // allow one refit to show drop location
             updateMap()
           }
           if (updated.status === 'cancelled') {
@@ -112,7 +114,7 @@ export default function DriverRideActive() {
         })
       }).addTo(leafletMap.current)
     }
-    updateRoute(lat, lng)
+    updateRoute(lat, lng, ride)
   }
 
   function updateStudentMarker(lat, lng) {
@@ -139,9 +141,7 @@ export default function DriverRideActive() {
   }
 
   function updateRoute(dLat, dLng, currentRide) {
-    // Debounce — only fetch route after driver stops moving for 3s
-    clearTimeout(routeDebounce.current)
-    routeDebounce.current = setTimeout(() => fetchRoute(dLat, dLng, currentRide), 3000)
+    fetchRoute(dLat, dLng, currentRide)
   }
 
   async function fetchRoute(dLat, dLng, currentRide) {
@@ -149,31 +149,34 @@ export default function DriverRideActive() {
     if (!leafletMap.current || !r) return
     const L = window.L
 
-    // Before OTP: route to pickup. After OTP: route to drop.
     const otpDone = ['otp_verified', 'in_progress'].includes(r.status)
-    const target = otpDone
-      ? [r.drop_lat, r.drop_lng]
-      : [r.pickup_lat, r.pickup_lng]
+    const target = otpDone ? [r.drop_lat, r.drop_lng] : [r.pickup_lat, r.pickup_lng]
+
+    const firstRoute = !routeRef.current
+    if (routeRef.current) leafletMap.current.removeLayer(routeRef.current)
 
     try {
       const res = await fetch(
-        `https://routing.openstreetmap.de/routed-car/route/v1/driving/${dLng},${dLat};${target[1]},${target[0]}?overview=full&geometries=geojson`
+        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${import.meta.env.VITE_ORS_API_KEY}&start=${dLng},${dLat}&end=${target[1]},${target[0]}`
       )
       const data = await res.json()
-      if (data.routes?.[0]) {
-        const isFirstRoute = !routeRef.current
-        if (routeRef.current) leafletMap.current.removeLayer(routeRef.current)
-        routeRef.current = L.geoJSON(data.routes[0].geometry, {
-          style: { color: '#00C853', weight: 5, opacity: 0.9 }
+      const coords = data.features?.[0]?.geometry?.coordinates
+      if (coords) {
+        const latLngs = coords.map(c => [c[1], c[0]])
+        routeRef.current = L.polyline(latLngs, {
+          color: '#00C853', weight: 5, opacity: 0.9
         }).addTo(leafletMap.current)
+      } else throw new Error('no route')
+    } catch {
+      routeRef.current = L.polyline([[dLat, dLng], target], {
+        color: '#00C853', weight: 4, opacity: 0.85, dashArray: '8, 6'
+      }).addTo(leafletMap.current)
+    }
 
-        // Only fit bounds on first draw
-        if (isFirstRoute) {
-          const bounds = [[dLat, dLng], target]
-          leafletMap.current.fitBounds(bounds, { padding: [80, 80], maxZoom: 17 })
-        }
-      }
-    } catch (e) {}
+    if (firstRoute) {
+      leafletMap.current.fitBounds([[dLat, dLng], target], { padding: [80, 80], maxZoom: 17 })
+      mapFitted.current = true
+    }
   }
 
   function updateMap() {

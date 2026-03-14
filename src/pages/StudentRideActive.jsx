@@ -41,7 +41,7 @@ export default function StudentRideActive() {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(sub); clearTimeout(searchTimer.current); clearInterval(studentLocInterval.current) }
+    return () => { supabase.removeChannel(sub); clearTimeout(searchTimer.current); if (studentLocInterval.current) navigator.geolocation.clearWatch(studentLocInterval.current) }
   }, [rideId])
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function StudentRideActive() {
         .channel(`driver-loc-${driver.id}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'driver_details', filter: `id=eq.${driver.id}` },
           (payload) => {
-            updateDriverMarker(payload.new.current_lat, payload.new.current_lng)
+            updateDriverMarker(payload.new.current_lat, payload.new.current_lng, ride)
           }
         )
         .subscribe()
@@ -84,7 +84,7 @@ export default function StudentRideActive() {
         startStudentLocationBroadcast(data.id)
       }
       if (data.status === 'completed' || data.status === 'cancelled') {
-        clearInterval(studentLocInterval.current)
+        if (studentLocInterval.current) navigator.geolocation.clearWatch(studentLocInterval.current)
         setTimeout(() => navigate('/'), 3000)
       }
     }
@@ -92,17 +92,18 @@ export default function StudentRideActive() {
 
   function startStudentLocationBroadcast(rideId) {
     if (!navigator.geolocation) return
-    clearInterval(studentLocInterval.current)
-    const broadcast = () => {
-      navigator.geolocation.getCurrentPosition(async (pos) => {
+    // Use watchPosition instead of setInterval to avoid geolocation violation
+    if (studentLocInterval.current) navigator.geolocation.clearWatch(studentLocInterval.current)
+    studentLocInterval.current = navigator.geolocation.watchPosition(
+      async (pos) => {
         await supabase.from('rides').update({
           student_lat: pos.coords.latitude,
           student_lng: pos.coords.longitude
         }).eq('id', rideId)
-      }, null, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
-    }
-    broadcast()
-    studentLocInterval.current = setInterval(broadcast, 30000)
+      },
+      null,
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    )
   }
 
   async function handleRideUpdate(newRide) {
@@ -113,6 +114,7 @@ export default function StudentRideActive() {
     }
     // Redraw route when OTP verified — now route to drop instead of pickup
     if (['otp_verified', 'in_progress'].includes(newRide.status) && driverDetails?.current_lat) {
+      mapFitted.current = false // allow one refit to show new drop route
       drawStudentRoute(driverDetails.current_lat, driverDetails.current_lng, newRide)
     }
     if (newRide.status === 'completed' || newRide.status === 'cancelled') {
@@ -202,8 +204,7 @@ export default function StudentRideActive() {
   }
 
   function drawStudentRoute(dLat, dLng, currentRide) {
-    clearTimeout(routeDebounce.current)
-    routeDebounce.current = setTimeout(() => fetchStudentRoute(dLat, dLng, currentRide), 3000)
+    fetchStudentRoute(dLat, dLng, currentRide)
   }
 
   async function fetchStudentRoute(dLat, dLng, currentRide) {
@@ -213,21 +214,32 @@ export default function StudentRideActive() {
     const otpDone = ['otp_verified', 'in_progress'].includes(r.status)
     const target = otpDone ? [r.drop_lat, r.drop_lng] : [r.pickup_lat, r.pickup_lng]
 
+    const firstRoute = !routeRef.current
+    if (routeRef.current) leafletMap.current.removeLayer(routeRef.current)
+
     try {
       const res = await fetch(
-        `https://routing.openstreetmap.de/routed-car/route/v1/driving/${dLng},${dLat};${target[1]},${target[0]}?overview=full&geometries=geojson`
+        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${import.meta.env.VITE_ORS_API_KEY}&start=${dLng},${dLat}&end=${target[1]},${target[0]}`
       )
       const data = await res.json()
-      if (data.routes?.[0]) {
-        if (routeRef.current) leafletMap.current.removeLayer(routeRef.current)
-        routeRef.current = L.geoJSON(data.routes[0].geometry, {
-          style: { color: '#00C853', weight: 5, opacity: 0.9 }
+      const coords = data.features?.[0]?.geometry?.coordinates
+      if (coords) {
+        const latLngs = coords.map(c => [c[1], c[0]])
+        routeRef.current = L.polyline(latLngs, {
+          color: '#00C853', weight: 5, opacity: 0.9
         }).addTo(leafletMap.current)
+      } else throw new Error('no route')
+    } catch {
+      // Fallback to straight line
+      routeRef.current = L.polyline([[dLat, dLng], target], {
+        color: '#00C853', weight: 4, opacity: 0.85, dashArray: '8, 6'
+      }).addTo(leafletMap.current)
+    }
 
-        const bounds = [[dLat, dLng], target]
-        leafletMap.current.fitBounds(bounds, { padding: [80, 80], maxZoom: 17 })
-      }
-    } catch (e) {}
+    if (firstRoute) {
+      leafletMap.current.fitBounds([[dLat, dLng], target], { padding: [80, 80], maxZoom: 17 })
+      mapFitted.current = true
+    }
   }
 
   function updateMap() {

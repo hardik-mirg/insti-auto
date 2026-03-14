@@ -70,7 +70,7 @@ export default function StudentBooking() {
       const timeoutId = setTimeout(() => controller.abort(), 4000)
       // Use alternative OSRM instance to avoid rate limits from route drawing
       const res = await fetch(
-        `https://routing.openstreetmap.de/routed-car/route/v1/driving/${pickup.lng},${pickup.lat};${drop.lng},${drop.lat}?overview=false`,
+        `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${drop.lng},${drop.lat}?overview=false`,
         { signal: controller.signal }
       )
       clearTimeout(timeoutId)
