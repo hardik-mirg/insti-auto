@@ -188,6 +188,12 @@ export default function DriverRideActive() {
     setOtpVerified(true)
   }
 
+  async function cancelRide() {
+    await supabase.from('rides').update({ status: 'cancelled' }).eq('id', rideId)
+    await supabase.from('driver_details').update({ is_available: true }).eq('id', profile.id)
+    navigate('/')
+  }
+
   async function startRide() {
     await supabase.from('rides').update({ status: 'in_progress' }).eq('id', rideId)
   }
@@ -292,6 +298,17 @@ export default function DriverRideActive() {
               <div className="caption">Passenger</div>
             </div>
           </div>
+        )}
+
+        {/* Cancel button — only before OTP verified */}
+        {!otpVerified && ride?.status === 'driver_assigned' && (
+          <button
+            className="btn btn-danger"
+            onClick={cancelRide}
+            style={{ marginBottom: '12px' }}
+          >
+            Cancel Ride
+          </button>
         )}
 
         {/* OTP entry */}

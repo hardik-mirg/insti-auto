@@ -24,6 +24,7 @@ export default function StudentBooking() {
   const [fareInfo, setFareInfo] = useState(null)
   const [booking, setBooking] = useState(false)
   const [step, setStep] = useState('select') // select | confirm
+  const [fetchingFare, setFetchingFare] = useState(false)
 
   // Pre-warm location permission on mount so it's instant when user taps the button
   useEffect(() => {
@@ -48,12 +49,33 @@ export default function StudentBooking() {
 
   useEffect(() => {
     if (pickup && drop) {
-      const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
-      setFareInfo(getFareBreakdown(dist))
+      fetchRoadDistance(pickup, drop)
     } else {
       setFareInfo(null)
     }
   }, [pickup, drop])
+
+  async function fetchRoadDistance(pickup, drop) {
+    setFetchingFare(true)
+    try {
+      const res = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${drop.lng},${drop.lat}?overview=false`
+      )
+      const data = await res.json()
+      if (data.routes?.[0]) {
+        const distKm = data.routes[0].distance / 1000
+        setFareInfo(getFareBreakdown(distKm))
+      } else {
+        const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
+        setFareInfo(getFareBreakdown(dist))
+      }
+    } catch {
+      const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
+      setFareInfo(getFareBreakdown(dist))
+    } finally {
+      setFetchingFare(false)
+    }
+  }
 
   function geolocate() {
     setLocating(true)
@@ -227,7 +249,14 @@ export default function StudentBooking() {
         </div>
 
         {/* Fare card */}
-        {fareInfo && (
+        {fetchingFare && (
+          <div className="card slide-up" style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="spinner"/>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Calculating fare...</span>
+          </div>
+        )}
+
+        {fareInfo && !fetchingFare && (
           <div className="card card-green slide-up" style={{ marginTop: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
@@ -282,13 +311,13 @@ export default function StudentBooking() {
         <button
           className="btn btn-primary"
           onClick={bookRide}
-          disabled={!pickup || !drop || booking}
+          disabled={!pickup || !drop || booking || fetchingFare}
           style={{ fontSize: '16px', padding: '16px' }}
         >
-          {booking ? <div className="spinner" style={{ borderTopColor: '#000' }}/> :
+          {(booking || fetchingFare) ? <div className="spinner" style={{ borderTopColor: booking ? '#000' : 'var(--green)' }}/> :
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           }
-          {booking ? 'Finding drivers...' : fareInfo ? `Book for ₹${fareInfo.total.toFixed(0)}` : 'Select locations'}
+          {booking ? 'Finding drivers...' : fetchingFare ? 'Calculating fare...' : fareInfo ? `Book for ₹${fareInfo.total.toFixed(0)}` : 'Select locations'}
         </button>
       </div>
     </div>
