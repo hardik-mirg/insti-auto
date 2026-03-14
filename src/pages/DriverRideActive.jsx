@@ -144,7 +144,7 @@ export default function DriverRideActive() {
     fetchRoute(dLat, dLng, currentRide)
   }
 
-  async function fetchRoute(dLat, dLng, currentRide) {
+  function fetchRoute(dLat, dLng, currentRide) {
     const r = currentRide || ride
     if (!leafletMap.current || !r) return
     const L = window.L
@@ -155,23 +155,9 @@ export default function DriverRideActive() {
     const firstRoute = !routeRef.current
     if (routeRef.current) leafletMap.current.removeLayer(routeRef.current)
 
-    try {
-      const res = await fetch(
-        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${import.meta.env.VITE_ORS_API_KEY}&start=${dLng},${dLat}&end=${target[1]},${target[0]}`
-      )
-      const data = await res.json()
-      const coords = data.features?.[0]?.geometry?.coordinates
-      if (coords) {
-        const latLngs = coords.map(c => [c[1], c[0]])
-        routeRef.current = L.polyline(latLngs, {
-          color: '#00C853', weight: 5, opacity: 0.9
-        }).addTo(leafletMap.current)
-      } else throw new Error('no route')
-    } catch {
-      routeRef.current = L.polyline([[dLat, dLng], target], {
-        color: '#00C853', weight: 4, opacity: 0.85, dashArray: '8, 6'
-      }).addTo(leafletMap.current)
-    }
+    routeRef.current = L.polyline([[dLat, dLng], target], {
+      color: '#00C853', weight: 4, opacity: 0.85, dashArray: '8, 6'
+    }).addTo(leafletMap.current)
 
     if (firstRoute) {
       leafletMap.current.fitBounds([[dLat, dLng], target], { padding: [80, 80], maxZoom: 17 })
