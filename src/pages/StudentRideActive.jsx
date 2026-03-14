@@ -30,6 +30,7 @@ export default function StudentRideActive() {
   const [searchPhase, setSearchPhase] = useState(1)
   const [eta, setEta] = useState(null)
   const [showPaymentPopup, setShowPaymentPopup] = useState(false)
+  const paymentRequestedRef = useRef(false)
   const studentLocInterval = useRef(null)
   const mapFitted = useRef(false)
 
@@ -38,7 +39,21 @@ export default function StudentRideActive() {
     const sub = supabase
       .channel(`ride-${rideId}-${Date.now()}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
-        (payload) => handleRideUpdate(payload.new)
+        (payload) => {
+          const updated = payload.new
+          const old = payload.old
+          // Ignore updates that only changed student location — avoid spamming handleRideUpdate
+          const onlyLocationChanged =
+            updated.student_lat !== old?.student_lat ||
+            updated.student_lng !== old?.student_lng
+          const anythingElseChanged =
+            updated.status !== old?.status ||
+            updated.driver_id !== old?.driver_id ||
+            updated.payment_requested !== old?.payment_requested
+          if (anythingElseChanged || updated.payment_requested) {
+            handleRideUpdate(updated)
+          }
+        }
       )
       .subscribe()
 
@@ -84,6 +99,10 @@ export default function StudentRideActive() {
       if (['driver_assigned', 'otp_verified', 'in_progress'].includes(data.status)) {
         startStudentLocationBroadcast(data.id)
       }
+      if (data.payment_requested) {
+        paymentRequestedRef.current = true
+        setShowPaymentPopup(true)
+      }
       if (data.status === 'completed' || data.status === 'cancelled') {
         if (studentLocInterval.current) navigator.geolocation.clearWatch(studentLocInterval.current)
         setTimeout(() => navigate('/'), 3000)
@@ -114,7 +133,10 @@ export default function StudentRideActive() {
       startStudentLocationBroadcast(newRide.id)
     }
     // Show payment popup when driver requests payment
-    if (newRide.payment_requested && !ride?.payment_requested) {
+    console.log('Ride update received, payment_requested:', newRide.payment_requested, 'ref:', paymentRequestedRef.current)
+    if (newRide.payment_requested && !paymentRequestedRef.current) {
+      console.log('Showing payment popup!')
+      paymentRequestedRef.current = true
       setShowPaymentPopup(true)
     }
     // Redraw route when OTP verified — now route to drop instead of pickup

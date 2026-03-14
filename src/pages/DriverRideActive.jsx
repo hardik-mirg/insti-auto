@@ -229,6 +229,12 @@ export default function DriverRideActive() {
     await supabase.from('rides').update({ status: 'in_progress' }).eq('id', rideId)
   }
 
+  async function requestPayment() {
+    setShowCompletePopup(true)
+    const { error } = await supabase.from('rides').update({ payment_requested: true }).eq('id', rideId)
+    console.log('payment_requested set:', error ? error.message : 'success')
+  }
+
   async function completeRide() {
     setCompleting(true)
     await supabase.from('rides').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', rideId)
@@ -394,7 +400,7 @@ export default function DriverRideActive() {
 
         {/* Complete ride */}
         {ride?.status === 'in_progress' && (
-          <button className="btn btn-primary" onClick={() => { setShowCompletePopup(true); supabase.from('rides').update({ payment_requested: true }).eq('id', rideId) }} style={{ fontSize: '16px' }}>
+          <button className="btn btn-primary" onClick={requestPayment} style={{ fontSize: '16px' }}>
             🏁 Complete Ride
           </button>
         )}
