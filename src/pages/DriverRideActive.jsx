@@ -26,13 +26,16 @@ export default function DriverRideActive() {
     const sub = supabase
       .channel(`driver-ride-${rideId}-${Date.now()}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
-        async (payload) => {
+        (payload) => {
           const updated = payload.new
           setRide(updated)
-          // Navigate away if cancelled by student
+          // Update student marker when their location changes
+          if (updated.student_lat && updated.student_lng) {
+            updateStudentMarker(updated.student_lat, updated.student_lng)
+          }
           if (updated.status === 'cancelled') {
             clearInterval(locationInterval.current)
-            await supabase.from('driver_details').update({ is_available: true }).eq('id', profile.id)
+            supabase.from('driver_details').update({ is_available: true }).eq('id', profile.id)
             navigate('/')
           }
           if (updated.status === 'completed') {
@@ -106,6 +109,22 @@ export default function DriverRideActive() {
     updateRoute(lat, lng)
   }
 
+  function updateStudentMarker(lat, lng) {
+    if (!leafletMap.current) return
+    const L = window.L
+    const pos = [lat, lng]
+    if (markersRef.current.student) {
+      markersRef.current.student.setLatLng(pos)
+    } else {
+      markersRef.current.student = L.marker(pos, {
+        icon: L.divIcon({
+          html: '<div style="display:flex;flex-direction:column;align-items:center"><div style="font-size:24px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6))">🧑‍🎓</div><div style="background:rgba(33,150,243,0.9);color:white;font-size:9px;padding:1px 5px;border-radius:4px;margin-top:1px;white-space:nowrap">Passenger</div></div>',
+          iconSize: [50, 42], iconAnchor: [25, 42], className: ''
+        })
+      }).addTo(leafletMap.current)
+    }
+  }
+
   async function updateRoute(dLat, dLng) {
     if (!leafletMap.current || !ride) return
     const L = window.L
@@ -139,6 +158,9 @@ export default function DriverRideActive() {
     }
     if (!markersRef.current.drop) {
       markersRef.current.drop = L.marker([ride.drop_lat, ride.drop_lng], { icon: makePin('🏁', 'Drop') }).addTo(map)
+    }
+    if (ride.student_lat && ride.student_lng) {
+      updateStudentMarker(ride.student_lat, ride.student_lng)
     }
     map.fitBounds([[ride.pickup_lat, ride.pickup_lng], [ride.drop_lat, ride.drop_lng]], { padding: [80, 80], maxZoom: 16 })
   }

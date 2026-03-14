@@ -28,6 +28,7 @@ export default function StudentRideActive() {
   const searchTimer = useRef(null)
   const [searchPhase, setSearchPhase] = useState(1)
   const [eta, setEta] = useState(null)
+  const studentLocInterval = useRef(null)
 
   useEffect(() => {
     fetchRide()
@@ -38,7 +39,7 @@ export default function StudentRideActive() {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(sub); clearTimeout(searchTimer.current) }
+    return () => { supabase.removeChannel(sub); clearTimeout(searchTimer.current); clearInterval(studentLocInterval.current) }
   }, [rideId])
 
   useEffect(() => {
@@ -77,16 +78,39 @@ export default function StudentRideActive() {
       setRide(data)
       if (data.driver_id) fetchDriver(data.driver_id)
       if (data.status === 'searching') startSearchExpansion()
+      if (['driver_assigned', 'otp_verified', 'in_progress'].includes(data.status)) {
+        startStudentLocationBroadcast(data.id)
+      }
       if (data.status === 'completed' || data.status === 'cancelled') {
+        clearInterval(studentLocInterval.current)
         setTimeout(() => navigate('/'), 3000)
       }
     }
   }
 
+  function startStudentLocationBroadcast(rideId) {
+    if (!navigator.geolocation) return
+    clearInterval(studentLocInterval.current)
+    const broadcast = () => {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        await supabase.from('rides').update({
+          student_lat: pos.coords.latitude,
+          student_lng: pos.coords.longitude
+        }).eq('id', rideId)
+      }, null, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+    }
+    broadcast()
+    studentLocInterval.current = setInterval(broadcast, 8000)
+  }
+
   async function handleRideUpdate(newRide) {
     setRide(newRide)
     if (newRide.driver_id && !driver) fetchDriver(newRide.driver_id)
+    if (['driver_assigned', 'otp_verified', 'in_progress'].includes(newRide.status)) {
+      startStudentLocationBroadcast(newRide.id)
+    }
     if (newRide.status === 'completed' || newRide.status === 'cancelled') {
+      clearInterval(studentLocInterval.current)
       setTimeout(() => navigate('/'), 3000)
     }
   }
