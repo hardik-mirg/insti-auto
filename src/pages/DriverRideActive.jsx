@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { usePushNotifications, sendPushToUser } from '../hooks/usePush'
 
 export default function DriverRideActive() {
   const { rideId } = useParams()
   const { profile } = useAuth()
   const navigate = useNavigate()
+  usePushNotifications(profile?.id)
   const [ride, setRide] = useState(null)
   const [student, setStudent] = useState(null)
   const [otpInput, setOtpInput] = useState(['', '', '', ''])
@@ -217,6 +219,8 @@ export default function DriverRideActive() {
     // OTP correct — skip otp_verified state, go straight to in_progress
     await supabase.from('rides').update({ status: 'in_progress', otp_verified: true, driver_entered_otp: entered }).eq('id', rideId)
     setOtpVerified(true)
+    // Notify student ride has started
+    if (student) await sendPushToUser(student.id, '🚀 Ride Started!', `You're on your way. Sit back and relax.`)
   }
 
   async function cancelRide() {
@@ -233,6 +237,8 @@ export default function DriverRideActive() {
     setShowCompletePopup(true)
     const { error } = await supabase.from('rides').update({ payment_requested: true }).eq('id', rideId)
     console.log('payment_requested set:', error ? error.message : 'success')
+    // Notify student to pay
+    if (ride && student) await sendPushToUser(student.id, '💰 Please Pay Your Driver', `Pay ₹${ride.fare?.toFixed(0)} in cash to complete your ride.`)
   }
 
   async function completeRide() {

@@ -7,14 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: null,  // ← ADD THIS — disables automatic SW registration
-      devOptions: {
-        enabled: true
-      },
+      devOptions: { enabled: true },
+      // Use our custom SW instead of Workbox auto-generated one
+      strategies: 'injectManifest',
+      srcDir: 'public',
+      filename: 'sw.js',
       workbox: {
         runtimeCaching: [],
-        navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^https?:\/\/(?!.*\.pages\.dev)/],
       },
       manifest: {
         name: 'InstiAuto',
@@ -27,9 +26,9 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-          { src: 'icons/icon-48x48.png', sizes: '48x48', type: 'image/png' },
-          { src: 'icons/icon-72x72.png', sizes: '72x72', type: 'image/png' },
-          { src: 'icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
+          { src: 'icons/icon-48x48.png',   sizes: '48x48',   type: 'image/png' },
+          { src: 'icons/icon-72x72.png',   sizes: '72x72',   type: 'image/png' },
+          { src: 'icons/icon-96x96.png',   sizes: '96x96',   type: 'image/png' },
           { src: 'icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
           { src: 'icons/icon-144x144.png', sizes: '144x144', type: 'image/png' },
           { src: 'icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
