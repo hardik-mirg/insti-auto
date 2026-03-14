@@ -28,23 +28,50 @@ export default function StudentBooking() {
 
   function geolocate() {
     setLocating(true)
+
+    async function reverseGeocode(lat, lng) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+        )
+        const data = await res.json()
+        return data.display_name?.split(',').slice(0, 3).join(', ') || 'Current location'
+      } catch {
+        return 'Current location'
+      }
+    }
+
+    // Step 1 — get coarse location fast (WiFi/cell), show it immediately
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-          )
-          const data = await res.json()
-          const addr = data.display_name?.split(',').slice(0, 3).join(', ') || 'Current location'
-          setPickup({ lat, lng, address: addr })
-        } catch {
-          setPickup({ lat, lng, address: 'Current location' })
-        }
+      async (coarsePos) => {
+        const { latitude: lat, longitude: lng } = coarsePos.coords
+        const addr = await reverseGeocode(lat, lng)
+        setPickup({ lat, lng, address: addr })
         setLocating(false)
+
+        // Step 2 — silently refine with GPS in background, update if meaningfully better
+        navigator.geolocation.getCurrentPosition(
+          async (finePos) => {
+            const { latitude: fLat, longitude: fLng, accuracy } = finePos.coords
+            // Only update if GPS gave significantly better accuracy (<20m)
+            if (accuracy < 20) {
+              const fineAddr = await reverseGeocode(fLat, fLng)
+              setPickup({ lat: fLat, lng: fLng, address: fineAddr })
+            }
+          },
+          () => {}, // silently ignore if GPS fails
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        )
       },
-      () => setLocating(false),
-      { timeout: 8000 }
+      (err) => {
+        setLocating(false)
+        if (err.code === 1) {
+          alert('Location permission denied. Please allow location access and try again.')
+        } else {
+          alert('Could not get your location. Please enter it manually.')
+        }
+      },
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
     )
   }
 
@@ -78,27 +105,37 @@ export default function StudentBooking() {
   }
 
   async function notifyNearbyDrivers(rideId, pickupLocation) {
-    // Find available drivers sorted by distance
-    const { data: drivers } = await supabase
+    // First try drivers with known location
+    const { data: driversWithLocation } = await supabase
       .from('driver_details')
       .select('*, profiles!inner(id, full_name)')
       .eq('is_available', true)
       .not('current_lat', 'is', null)
 
-    if (!drivers?.length) return
+    let driversToNotify = []
 
-    // Sort by distance
-    const sorted = drivers
-      .map(d => ({
-        ...d,
-        dist: getDistanceKm(pickupLocation.lat, pickupLocation.lng, d.current_lat, d.current_lng)
-      }))
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, 5) // Notify 5 nearest
+    if (driversWithLocation?.length) {
+      // Sort by distance and take 5 nearest
+      driversToNotify = driversWithLocation
+        .map(d => ({
+          ...d,
+          dist: getDistanceKm(pickupLocation.lat, pickupLocation.lng, d.current_lat, d.current_lng)
+        }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 5)
+    } else {
+      // Fallback — notify ALL available drivers regardless of location
+      const { data: allDrivers } = await supabase
+        .from('driver_details')
+        .select('*, profiles!inner(id, full_name)')
+        .eq('is_available', true)
+      driversToNotify = allDrivers || []
+    }
 
-    // Create ride requests for nearest drivers
+    if (!driversToNotify.length) return
+
     await supabase.from('ride_requests').insert(
-      sorted.map(d => ({
+      driversToNotify.map(d => ({
         ride_id: rideId,
         driver_id: d.profiles.id,
         status: 'pending'
