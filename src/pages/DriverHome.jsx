@@ -162,8 +162,8 @@ export default function DriverHome() {
   }
 
   async function checkMissedRequests() {
-    // Step 1: get pending requests for this driver
-    const { data: requests } = await supabase
+    console.log('checkMissedRequests called, driver id:', profile.id)
+    const { data: requests, error: reqErr } = await supabase
       .from('ride_requests')
       .select('*')
       .eq('driver_id', profile.id)
@@ -171,23 +171,25 @@ export default function DriverHome() {
       .order('created_at', { ascending: false })
       .limit(5)
 
+    console.log('Pending requests found:', requests, reqErr)
     if (!requests?.length) return
 
-    // Step 2: check which ones still have a searching ride
     for (const request of requests) {
-      const { data: ride } = await supabase
+      console.log('Request object:', JSON.stringify(request))
+      const { data: ride, error: rideErr } = await supabase
         .from('rides')
-        .select('*')
+        .select('id, status')
         .eq('id', request.ride_id)
-        .eq('status', 'searching')
         .maybeSingle()
 
-      if (ride) {
-        console.log('Found missed request:', request)
+      console.log('Ride for request', request.ride_id, '— status:', ride?.status, 'error:', rideErr)
+      if (ride?.status === 'searching') {
+        console.log('Loading missed request:', request)
         await loadRideRequest(request)
-        return // only show one at a time
+        return
       }
     }
+    console.log('No valid missed requests found')
   }
 
   async function acceptRequest() {
