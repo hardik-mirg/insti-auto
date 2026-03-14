@@ -2,20 +2,20 @@
  * Mumbai Auto Rickshaw Fare Calculator
  * Based on official Maharashtra government meter rates (2024-2026)
  */
-
+ 
 const MINIMUM_FARE = 26
 const MIN_FARE_KM = 1.5
 const RATE_PER_KM = 17.33
 const NIGHT_SURCHARGE = 0.25
-
+ 
 // IITB Campus bounding box — strict limits
 export const IITB_BOUNDS = {
-  minLat: 19.1250,
-  maxLat: 19.1470,
-  minLng: 72.9050,
-  maxLng: 72.9220,
+  minLat: 19.1200,
+  maxLat: 19.1500,
+  minLng: 72.9030,
+  maxLng: 72.9250,
 }
-
+ 
 export function isWithinCampus(lat, lng) {
   return (
     lat >= IITB_BOUNDS.minLat &&
@@ -24,7 +24,7 @@ export function isWithinCampus(lat, lng) {
     lng <= IITB_BOUNDS.maxLng
   )
 }
-
+ 
 export function calculateFare(distanceKm, isNight = false) {
   let fare = MINIMUM_FARE
   if (distanceKm > MIN_FARE_KM) {
@@ -34,12 +34,12 @@ export function calculateFare(distanceKm, isNight = false) {
   fare = Math.ceil(fare * 2) / 2
   return Math.round(fare * 100) / 100
 }
-
+ 
 export function isNightTime() {
   const hour = new Date().getHours()
   return hour >= 0 && hour < 5
 }
-
+ 
 export function getFareBreakdown(distanceKm) {
   const night = isNightTime()
   const fare = calculateFare(distanceKm, night)
@@ -55,7 +55,7 @@ export function getFareBreakdown(distanceKm) {
     minFareKm: MIN_FARE_KM
   }
 }
-
+ 
 export function getDistanceKm(lat1, lng1, lat2, lng2) {
   const R = 6371
   const dLat = toRad(lat2 - lat1)
@@ -67,7 +67,7 @@ export function getDistanceKm(lat1, lng1, lat2, lng2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return R * c
 }
-
+ 
 function toRad(deg) {
   return deg * (Math.PI / 180)
 }

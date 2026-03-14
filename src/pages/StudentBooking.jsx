@@ -36,38 +36,25 @@ export default function StudentBooking() {
 
   function geolocate() {
     setLocating(true)
-
-    // Step 1 — get coarse location fast (WiFi/cell), show it immediately
     navigator.geolocation.getCurrentPosition(
-      async (coarsePos) => {
-        const { latitude: lat, longitude: lng } = coarsePos.coords
-        const addr = await reverseGeocode(lat, lng)
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        console.log('Geolocation success:', lat, lng)
+        const addr = findNearestLocation(lat, lng)
+        console.log('Nearest location:', addr)
         setPickup({ lat, lng, address: addr })
         setLocating(false)
-
-        // Step 2 — silently refine with GPS in background, update if meaningfully better
-        navigator.geolocation.getCurrentPosition(
-          async (finePos) => {
-            const { latitude: fLat, longitude: fLng, accuracy } = finePos.coords
-            // Only update if GPS gave significantly better accuracy (<20m)
-            if (accuracy < 20) {
-              const fineAddr = await reverseGeocode(fLat, fLng)
-              setPickup({ lat: fLat, lng: fLng, address: fineAddr })
-            }
-          },
-          () => {}, // silently ignore if GPS fails
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        )
       },
       (err) => {
         setLocating(false)
+        console.log('Geolocation error:', err.code, err.message)
         if (err.code === 1) {
-          alert('Location permission denied. Please allow location access and try again.')
+          alert('Location permission denied. Please allow location access in your browser settings.')
         } else {
           alert('Could not get your location. Please enter it manually.')
         }
       },
-      { enableHighAccuracy: false, timeout: 5000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     )
   }
 

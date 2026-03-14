@@ -1,10 +1,18 @@
-import { useState, useRef } from 'react'
-import { IITB_LOCATIONS, isWithinCampus } from '../utils/fare'
+import { useState, useEffect, useRef } from 'react'
+import { IITB_LOCATIONS } from '../utils/fare'
 
 export default function LocationSearch({ label, value, onSelect, placeholder, icon }) {
   const [query, setQuery] = useState(value?.address || '')
   const [results, setResults] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
+
+  // Sync when parent updates value (e.g. geolocation)
+  useEffect(() => {
+    if (value?.address && value.address !== query) {
+      setQuery(value.address)
+    }
+    if (!value) setQuery('')
+  }, [value])
 
   function handleChange(e) {
     const q = e.target.value
