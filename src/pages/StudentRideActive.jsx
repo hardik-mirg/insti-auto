@@ -211,9 +211,10 @@ export default function StudentRideActive() {
       <div style={{ flex: 1, position: 'relative' }}>
         <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
         
-        {/* Status overlay */}
+        {/* Status overlay — z-index above Leaflet */}
         <div style={{
           position: 'absolute', top: 0, left: 0, right: 0,
+          zIndex: 1000,
           padding: '16px',
           paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
           background: 'linear-gradient(to bottom, rgba(8,11,10,0.9) 0%, transparent 100%)',
