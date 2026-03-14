@@ -88,6 +88,24 @@ export default function DriverHome() {
         }
         await loadRideRequest(payload.new)
       })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'rides'
+      }, (payload) => {
+        // If the ride we're showing got accepted by another driver, dismiss it
+        if (
+          pendingRequestRef.current &&
+          payload.new.id === pendingRequestRef.current.ride_id &&
+          payload.new.status !== 'searching'
+        ) {
+          console.log('Ride taken by another driver — dismissing')
+          clearInterval(timerRef.current)
+          setPendingRequest(null)
+          setRideData(null)
+          setRequestTimer(0)
+        }
+      })
       .subscribe((status) => {
         console.log('Realtime subscription status:', status)
       })
@@ -196,14 +214,29 @@ export default function DriverHome() {
     if (!pendingRequest || !rideData) return
     clearInterval(timerRef.current)
 
-    await supabase.from('ride_requests').update({ status: 'accepted' }).eq('id', pendingRequest.id)
-    await supabase.from('rides').update({
-      status: 'driver_assigned',
-      driver_id: profile.id,
-      accepted_at: new Date().toISOString()
-    }).eq('id', rideData.id)
-    await supabase.from('driver_details').update({ is_available: false }).eq('id', profile.id)
+    // Only update if ride is STILL searching — prevents double accepts
+    const { data: updated, error } = await supabase
+      .from('rides')
+      .update({
+        status: 'driver_assigned',
+        driver_id: profile.id,
+        accepted_at: new Date().toISOString()
+      })
+      .eq('id', rideData.id)
+      .eq('status', 'searching') // atomic check — only succeeds if still searching
+      .select()
+      .single()
 
+    if (error || !updated) {
+      // Another driver already accepted — dismiss the request
+      setPendingRequest(null)
+      setRideData(null)
+      setRequestTimer(0)
+      return
+    }
+
+    await supabase.from('ride_requests').update({ status: 'accepted' }).eq('id', pendingRequest.id)
+    await supabase.from('driver_details').update({ is_available: false }).eq('id', profile.id)
     navigate(`/ride/${rideData.id}`)
   }
 
