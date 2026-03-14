@@ -259,7 +259,7 @@ export default function StudentRideActive() {
 
       {/* Map — fills screen */}
       <div style={{ flex: 1, position: 'relative' }}>
-        <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
+        <div ref={mapRef} style={{ width: '100%', height: '100%', touchAction: 'none' }}/>
       </div>
 
       {/* Bottom panel */}
