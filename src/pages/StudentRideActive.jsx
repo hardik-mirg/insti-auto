@@ -206,52 +206,36 @@ export default function StudentRideActive() {
   const status = STATUS_LABELS[ride?.status] || STATUS_LABELS.searching
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
-      {/* Map */}
+    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', position: 'relative' }}>
+      {/* Status bar — fixed above everything including Leaflet */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        zIndex: 9999,
+        padding: '12px 16px',
+        paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))',
+        background: 'linear-gradient(to bottom, rgba(8,11,10,0.97) 60%, transparent 100%)',
+        display: 'flex', alignItems: 'center', gap: '12px',
+        pointerEvents: 'none'
+      }}>
+        <div style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', padding: '10px 14px',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          flex: 1, pointerEvents: 'auto'
+        }}>
+          <span style={{ fontSize: '20px' }}>{status.icon}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: status.color }}>{status.text}</div>
+            {ride?.status === 'searching' && <div className="caption">Phase {searchPhase} · expanding search...</div>}
+            {eta && ride?.status === 'driver_assigned' && <div className="caption">ETA: ~{eta} min</div>}
+          </div>
+          {ride?.status === 'searching' && <div className="spinner"/>}
+        </div>
+      </div>
+
+      {/* Map — fills screen */}
       <div style={{ flex: 1, position: 'relative' }}>
         <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
-        
-        {/* Status overlay — z-index above Leaflet */}
-        <div style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          zIndex: 1000,
-          padding: '16px',
-          paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))',
-          background: 'linear-gradient(to bottom, rgba(8,11,10,0.9) 0%, transparent 100%)',
-          display: 'flex', alignItems: 'center', gap: '12px'
-        }}>
-          <button onClick={() => navigate('/')} style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: '50%', width: '36px', height: '36px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" strokeWidth="2">
-              <path d="M19 12H5M12 5l-7 7 7 7"/>
-            </svg>
-          </button>
-          <div style={{
-            flex: 1,
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            padding: '10px 14px',
-            display: 'flex', alignItems: 'center', gap: '10px'
-          }}>
-            <span style={{ fontSize: '20px' }}>{status.icon}</span>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: '600', color: status.color }}>{status.text}</div>
-              {ride?.status === 'searching' && (
-                <div className="caption">Phase {searchPhase} · expanding search...</div>
-              )}
-              {eta && ['driver_assigned'].includes(ride?.status) && (
-                <div className="caption">ETA: ~{eta} min</div>
-              )}
-            </div>
-            {ride?.status === 'searching' && (
-              <div className="spinner" style={{ marginLeft: 'auto' }}/>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Bottom panel */}

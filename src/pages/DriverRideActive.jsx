@@ -185,11 +185,11 @@ export default function DriverRideActive() {
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', position: 'relative' }}>
-      {/* Status bar — sits ABOVE the map using z-index */}
+      {/* Status bar — fixed above Leaflet */}
       <div style={{
-        position: 'absolute',
+        position: 'fixed',
         top: 0, left: 0, right: 0,
-        zIndex: 1000,
+        zIndex: 9999,
         padding: '12px 16px',
         paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))',
         background: 'linear-gradient(to bottom, rgba(8,11,10,0.97) 70%, transparent 100%)',
