@@ -13,6 +13,7 @@ export default function DriverRideActive() {
   const [otpError, setOtpError] = useState('')
   const [otpVerified, setOtpVerified] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [showCompletePopup, setShowCompletePopup] = useState(false)
   const mapRef = useRef(null)
   const leafletMap = useRef(null)
   const markersRef = useRef({})
@@ -213,7 +214,8 @@ export default function DriverRideActive() {
       otpRefs[0].current?.focus()
       return
     }
-    await supabase.from('rides').update({ status: 'otp_verified', otp_verified: true, driver_entered_otp: entered }).eq('id', rideId)
+    // OTP correct — skip otp_verified state, go straight to in_progress
+    await supabase.from('rides').update({ status: 'in_progress', otp_verified: true, driver_entered_otp: entered }).eq('id', rideId)
     setOtpVerified(true)
   }
 
@@ -388,17 +390,12 @@ export default function DriverRideActive() {
           </div>
         )}
 
-        {/* Start ride */}
-        {otpVerified && ride?.status === 'otp_verified' && (
-          <button className="btn btn-primary" onClick={startRide} style={{ marginBottom: '12px', fontSize: '16px' }}>
-            🚀 Start Ride
-          </button>
-        )}
+
 
         {/* Complete ride */}
         {ride?.status === 'in_progress' && (
-          <button className="btn btn-primary" onClick={completeRide} disabled={completing} style={{ fontSize: '16px' }}>
-            {completing ? <div className="spinner" style={{ borderTopColor: '#000' }}/> : '🏁 Complete Ride'}
+          <button className="btn btn-primary" onClick={() => { setShowCompletePopup(true); supabase.from('rides').update({ payment_requested: true }).eq('id', rideId) }} style={{ fontSize: '16px' }}>
+            🏁 Complete Ride
           </button>
         )}
 
@@ -414,6 +411,67 @@ export default function DriverRideActive() {
           </div>
         )}
       </div>
+      {/* Payment collection popup */}
+      {showCompletePopup && (
+        <div className="overlay" onClick={() => setShowCompletePopup(false)}>
+          <div className="bottom-sheet slide-up" style={{ width: '100%', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>💰</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '800', marginBottom: '6px' }}>
+                Collect Payment
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                Please collect the fare from the passenger
+              </p>
+            </div>
+
+            <div style={{
+              background: 'var(--green-subtle)',
+              border: '1px solid var(--border-green)',
+              borderRadius: 'var(--radius)',
+              padding: '20px',
+              textAlign: 'center',
+              marginBottom: '20px'
+            }}>
+              <div className="label" style={{ color: 'var(--green)', marginBottom: '6px' }}>Amount to collect</div>
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '52px',
+                fontWeight: '800',
+                color: 'var(--green)',
+                textShadow: '0 0 30px rgba(0,200,83,0.4)',
+                lineHeight: 1
+              }}>
+                ₹{ride?.fare?.toFixed(0)}
+              </div>
+              <div className="caption" style={{ marginTop: '6px' }}>{ride?.distance_km?.toFixed(1)} km</div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={completeRide}
+              disabled={completing}
+              style={{ fontSize: '16px', padding: '16px' }}
+            >
+              {completing
+                ? <div className="spinner" style={{ borderTopColor: '#000' }}/>
+                : '✓ Payment Received — End Ride'}
+            </button>
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '8px' }}>
+              Passenger has been notified to pay
+            </p>
+
+            <button
+              className="btn btn-ghost"
+              onClick={() => setShowCompletePopup(false)}
+              style={{ marginTop: '8px', color: 'var(--text-muted)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

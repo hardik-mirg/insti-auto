@@ -29,6 +29,7 @@ export default function StudentRideActive() {
   const searchTimer = useRef(null)
   const [searchPhase, setSearchPhase] = useState(1)
   const [eta, setEta] = useState(null)
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false)
   const studentLocInterval = useRef(null)
   const mapFitted = useRef(false)
 
@@ -112,13 +113,17 @@ export default function StudentRideActive() {
     if (['driver_assigned', 'otp_verified', 'in_progress'].includes(newRide.status)) {
       startStudentLocationBroadcast(newRide.id)
     }
+    // Show payment popup when driver requests payment
+    if (newRide.payment_requested && !ride?.payment_requested) {
+      setShowPaymentPopup(true)
+    }
     // Redraw route when OTP verified — now route to drop instead of pickup
     if (['otp_verified', 'in_progress'].includes(newRide.status) && driverDetails?.current_lat) {
       mapFitted.current = false // allow one refit to show new drop route
       drawStudentRoute(driverDetails.current_lat, driverDetails.current_lng, newRide)
     }
     if (newRide.status === 'completed' || newRide.status === 'cancelled') {
-      clearInterval(studentLocInterval.current)
+      if (studentLocInterval.current) navigator.geolocation.clearWatch(studentLocInterval.current)
       setTimeout(() => navigate('/'), 3000)
     }
   }
@@ -392,6 +397,59 @@ export default function StudentRideActive() {
           </button>
         )}
       </div>
+      {/* Payment popup */}
+      {showPaymentPopup && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'flex-end'
+        }}>
+          <div className="bottom-sheet slide-up" style={{ width: '100%', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🙏</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '800', marginBottom: '6px' }}>
+                Please Pay Your Driver
+              </div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                Your ride is complete. Please pay the fare in cash.
+              </p>
+            </div>
+
+            <div style={{
+              background: 'var(--green-subtle)',
+              border: '1px solid var(--border-green)',
+              borderRadius: 'var(--radius)',
+              padding: '20px',
+              textAlign: 'center',
+              marginBottom: '20px'
+            }}>
+              <div className="label" style={{ color: 'var(--green)', marginBottom: '6px' }}>Amount to pay</div>
+              <div style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '52px',
+                fontWeight: '800',
+                color: 'var(--green)',
+                textShadow: '0 0 30px rgba(0,200,83,0.4)',
+                lineHeight: 1
+              }}>
+                ₹{ride?.fare?.toFixed(0)}
+              </div>
+              <div className="caption" style={{ marginTop: '6px' }}>{ride?.distance_km?.toFixed(1)} km · Cash payment</div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowPaymentPopup(false)}
+              style={{ fontSize: '16px', padding: '16px' }}
+            >
+              ✓ Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
