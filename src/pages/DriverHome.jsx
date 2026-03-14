@@ -42,7 +42,12 @@ export default function DriverHome() {
     if (data) {
       setDriverDetails(data)
       setIsAvailable(data.is_available)
-      if (data.is_available) startLocationTracking()
+      if (data.is_available) {
+        startLocationTracking()
+        // Check for missed requests on every mount while online
+        // Covers: after ride ends, after app refresh, after going online
+        await checkMissedRequests()
+      }
     }
   }
 
@@ -147,11 +152,30 @@ export default function DriverHome() {
       setIsAvailable(newState)
       if (newState) {
         startLocationTracking()
+        // Check for any pending requests that came in while driver was offline
+        await checkMissedRequests()
       } else {
         clearInterval(locationInterval.current)
       }
     }
     setToggling(false)
+  }
+
+  async function checkMissedRequests() {
+    // Find any pending ride_requests for this driver where the ride is still searching
+    const { data: requests } = await supabase
+      .from('ride_requests')
+      .select('*, rides!inner(status)')
+      .eq('driver_id', profile.id)
+      .eq('status', 'pending')
+      .eq('rides.status', 'searching')
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (requests?.length > 0) {
+      console.log('Found missed request:', requests[0])
+      await loadRideRequest(requests[0])
+    }
   }
 
   async function acceptRequest() {
