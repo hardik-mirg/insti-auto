@@ -26,13 +26,13 @@ export default function DriverRideActive() {
     const sub = supabase
       .channel(`driver-ride-${rideId}-${Date.now()}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
-        (payload) => {
+        async (payload) => {
           const updated = payload.new
           setRide(updated)
           // Navigate away if cancelled by student
           if (updated.status === 'cancelled') {
             clearInterval(locationInterval.current)
-            supabase.from('driver_details').update({ is_available: true }).eq('id', profile.id)
+            await supabase.from('driver_details').update({ is_available: true }).eq('id', profile.id)
             navigate('/')
           }
           if (updated.status === 'completed') {
