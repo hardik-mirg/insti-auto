@@ -32,13 +32,13 @@ export default function StudentRideActive() {
   useEffect(() => {
     fetchRide()
     const sub = supabase
-      .channel(`ride-${rideId}`)
+      .channel(`ride-${rideId}-${Date.now()}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `id=eq.${rideId}` },
         (payload) => handleRideUpdate(payload.new)
       )
       .subscribe()
 
-    return () => { sub.unsubscribe(); clearTimeout(searchTimer.current) }
+    return () => { supabase.removeChannel(sub); clearTimeout(searchTimer.current) }
   }, [rideId])
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export default function StudentRideActive() {
           }
         )
         .subscribe()
-      return () => sub.unsubscribe()
+      return () => supabase.removeChannel(sub)
     }
   }, [driver])
 
