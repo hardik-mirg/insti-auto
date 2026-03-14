@@ -7,12 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: null,  // ← ADD THIS — disables automatic SW registration
       devOptions: {
         enabled: true
       },
       workbox: {
         runtimeCaching: [],
-        injectRegister: null,  // ← ADD THIS — disables automatic SW registration
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^https?:\/\/(?!.*\.pages\.dev)/],
       },

@@ -30,6 +30,7 @@ export default function StudentRideActive() {
   const [searchPhase, setSearchPhase] = useState(1)
   const [eta, setEta] = useState(null)
   const studentLocInterval = useRef(null)
+  const mapFitted = useRef(false)
 
   useEffect(() => {
     fetchRide()
@@ -255,13 +256,22 @@ export default function StudentRideActive() {
       updateDriverMarker(driverDetails.current_lat, driverDetails.current_lng, ride)
     }
 
-    const points = [
-      driverDetails?.current_lat ? [driverDetails.current_lat, driverDetails.current_lng] : null,
-      ride?.pickup_lat ? [ride.pickup_lat, ride.pickup_lng] : null,
-      ['in_progress', 'otp_verified'].includes(ride?.status) ? [ride.drop_lat, ride.drop_lng] : null
-    ].filter(Boolean)
+    // Only fit bounds once on first load — don't re-center when student location updates
+    if (!mapFitted.current) {
+      const points = [
+        driverDetails?.current_lat ? [driverDetails.current_lat, driverDetails.current_lng] : null,
+        ride?.pickup_lat ? [ride.pickup_lat, ride.pickup_lng] : null,
+        ['in_progress', 'otp_verified'].includes(ride?.status) ? [ride.drop_lat, ride.drop_lng] : null
+      ].filter(Boolean)
 
-    if (points.length > 0) map.fitBounds(points.length === 1 ? L.latLngBounds([points[0], points[0]]).pad(0.01) : points, { padding: [50, 50], maxZoom: 16 })
+      if (points.length > 0) {
+        map.fitBounds(
+          points.length === 1 ? L.latLngBounds([points[0], points[0]]).pad(0.01) : points,
+          { padding: [50, 50], maxZoom: 16 }
+        )
+        mapFitted.current = true
+      }
+    }
   }
 
   async function cancelRide() {
@@ -299,7 +309,7 @@ export default function StudentRideActive() {
         </div>
       </div>
 
-      {/* Map — fills screen */}
+      {/* Map */}
       <div style={{ flex: 1, position: 'relative' }}>
         <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
       </div>

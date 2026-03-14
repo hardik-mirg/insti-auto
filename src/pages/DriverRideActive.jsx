@@ -290,7 +290,7 @@ export default function DriverRideActive() {
         </div>
       </div>
 
-      {/* Map — fills entire screen */}
+      {/* Map */}
       <div style={{ flex: 1, position: 'relative' }}>
         <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
       </div>
