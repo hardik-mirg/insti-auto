@@ -10,6 +10,12 @@ export default defineConfig({
       devOptions: {
         enabled: true
       },
+      workbox: {
+        runtimeCaching: [],
+        injectRegister: null,  // ← ADD THIS — disables automatic SW registration
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^https?:\/\/(?!.*\.pages\.dev)/],
+      },
       manifest: {
         name: 'InstiAuto',
         short_name: 'InstiAuto',
@@ -21,9 +27,9 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-          { src: 'icons/icon-48x48.png',   sizes: '48x48',   type: 'image/png' },
-          { src: 'icons/icon-72x72.png',   sizes: '72x72',   type: 'image/png' },
-          { src: 'icons/icon-96x96.png',   sizes: '96x96',   type: 'image/png' },
+          { src: 'icons/icon-48x48.png', sizes: '48x48', type: 'image/png' },
+          { src: 'icons/icon-72x72.png', sizes: '72x72', type: 'image/png' },
+          { src: 'icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
           { src: 'icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
           { src: 'icons/icon-144x144.png', sizes: '144x144', type: 'image/png' },
           { src: 'icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },

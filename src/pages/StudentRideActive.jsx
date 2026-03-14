@@ -25,6 +25,7 @@ export default function StudentRideActive() {
   const leafletMap = useRef(null)
   const markersRef = useRef({})
   const routeRef = useRef(null)
+  const routeDebounce = useRef(null)
   const searchTimer = useRef(null)
   const [searchPhase, setSearchPhase] = useState(1)
   const [eta, setEta] = useState(null)
@@ -100,7 +101,7 @@ export default function StudentRideActive() {
       }, null, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
     }
     broadcast()
-    studentLocInterval.current = setInterval(broadcast, 8000)
+    studentLocInterval.current = setInterval(broadcast, 30000)
   }
 
   async function handleRideUpdate(newRide) {
@@ -108,6 +109,10 @@ export default function StudentRideActive() {
     if (newRide.driver_id && !driver) fetchDriver(newRide.driver_id)
     if (['driver_assigned', 'otp_verified', 'in_progress'].includes(newRide.status)) {
       startStudentLocationBroadcast(newRide.id)
+    }
+    // Redraw route when OTP verified — now route to drop instead of pickup
+    if (['otp_verified', 'in_progress'].includes(newRide.status) && driverDetails?.current_lat) {
+      drawStudentRoute(driverDetails.current_lat, driverDetails.current_lng, newRide)
     }
     if (newRide.status === 'completed' || newRide.status === 'cancelled') {
       clearInterval(studentLocInterval.current)
@@ -170,11 +175,12 @@ export default function StudentRideActive() {
     }
   }
 
-  function updateDriverMarker(lat, lng) {
+  function updateDriverMarker(lat, lng, currentRide) {
     if (!leafletMap.current) return
     const L = window.L
+    const r = currentRide || ride
     const pos = [lat, lng]
-    
+
     if (markersRef.current.driver) {
       markersRef.current.driver.setLatLng(pos)
     } else {
@@ -185,32 +191,68 @@ export default function StudentRideActive() {
         })
       }).addTo(leafletMap.current)
     }
-    if (ride) {
-      const dist = getDistanceKm(lat, lng, ride.pickup_lat, ride.pickup_lng)
+
+    if (r) {
+      const dist = getDistanceKm(lat, lng, r.pickup_lat, r.pickup_lng)
       setEta(Math.max(1, Math.round(dist / 0.25)))
+      // Draw route: before OTP — driver to pickup. After OTP — driver to drop.
+      drawStudentRoute(lat, lng, r)
     }
+  }
+
+  function drawStudentRoute(dLat, dLng, currentRide) {
+    clearTimeout(routeDebounce.current)
+    routeDebounce.current = setTimeout(() => fetchStudentRoute(dLat, dLng, currentRide), 3000)
+  }
+
+  async function fetchStudentRoute(dLat, dLng, currentRide) {
+    const r = currentRide || ride
+    if (!leafletMap.current || !r) return
+    const L = window.L
+    const otpDone = ['otp_verified', 'in_progress'].includes(r.status)
+    const target = otpDone ? [r.drop_lat, r.drop_lng] : [r.pickup_lat, r.pickup_lng]
+
+    try {
+      const res = await fetch(
+        `https://routing.openstreetmap.de/routed-car/route/v1/driving/${dLng},${dLat};${target[1]},${target[0]}?overview=full&geometries=geojson`
+      )
+      const data = await res.json()
+      if (data.routes?.[0]) {
+        if (routeRef.current) leafletMap.current.removeLayer(routeRef.current)
+        routeRef.current = L.geoJSON(data.routes[0].geometry, {
+          style: { color: '#00C853', weight: 5, opacity: 0.9 }
+        }).addTo(leafletMap.current)
+
+        const bounds = [[dLat, dLng], target]
+        leafletMap.current.fitBounds(bounds, { padding: [80, 80], maxZoom: 17 })
+      }
+    } catch (e) {}
   }
 
   function updateMap() {
     if (!leafletMap.current) return
     const L = window.L
     const map = leafletMap.current
+    const otpDone = ride && ['otp_verified', 'in_progress'].includes(ride.status)
 
     const makeIcon = (emoji, size = 30) => L.divIcon({
       html: `<div style="font-size:${size}px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6))">${emoji}</div>`,
       iconSize: [size, size], iconAnchor: [size/2, size], className: ''
     })
 
+    // Always show pickup
     if (ride?.pickup_lat && !markersRef.current.pickup) {
       markersRef.current.pickup = L.marker([ride.pickup_lat, ride.pickup_lng], { icon: makeIcon('📍') })
-        .addTo(map).bindPopup('Pickup: ' + ride.pickup_address)
+        .addTo(map)
     }
-    if (ride?.drop_lat && !markersRef.current.drop) {
+    // Show drop only after OTP verified
+    if (otpDone && ride?.drop_lat && !markersRef.current.drop) {
       markersRef.current.drop = L.marker([ride.drop_lat, ride.drop_lng], { icon: makeIcon('🏁') })
-        .addTo(map).bindPopup('Drop: ' + ride.drop_address)
+        .addTo(map)
     }
+
     if (driverDetails?.current_lat) {
-      updateDriverMarker(driverDetails.current_lat, driverDetails.current_lng)
+      updateDriverMarker(driverDetails.current_lat, driverDetails.current_lng, ride)
     }
 
     const points = [

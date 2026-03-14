@@ -57,10 +57,24 @@ export default function StudentBooking() {
 
   async function fetchRoadDistance(pickup, drop) {
     setFetchingFare(true)
+
+    // Always fall back to straight-line after 4 seconds if OSRM doesn't respond
+    const fallbackTimer = setTimeout(() => {
+      const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
+      setFareInfo(getFareBreakdown(dist))
+      setFetchingFare(false)
+    }, 4000)
+
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 4000)
+      // Use alternative OSRM instance to avoid rate limits from route drawing
       const res = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${drop.lng},${drop.lat}?overview=false`
+        `https://routing.openstreetmap.de/routed-car/route/v1/driving/${pickup.lng},${pickup.lat};${drop.lng},${drop.lat}?overview=false`,
+        { signal: controller.signal }
       )
+      clearTimeout(timeoutId)
+      clearTimeout(fallbackTimer)
       const data = await res.json()
       if (data.routes?.[0]) {
         const distKm = data.routes[0].distance / 1000
@@ -70,6 +84,7 @@ export default function StudentBooking() {
         setFareInfo(getFareBreakdown(dist))
       }
     } catch {
+      clearTimeout(fallbackTimer)
       const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
       setFareInfo(getFareBreakdown(dist))
     } finally {
