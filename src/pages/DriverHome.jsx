@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -15,44 +15,44 @@ export default function DriverHome() {
   const [todayRides, setTodayRides] = useState(0)
   const [todayEarnings, setTodayEarnings] = useState(0)
   const locationInterval = useRef(null)
-  const requestTimeout = useRef(null)
   const [requestTimer, setRequestTimer] = useState(0)
   const timerRef = useRef(null)
+  const channelRef = useRef(null)
+  const pendingRequestRef = useRef(null)
+
+  // Keep ref in sync with state so callbacks always see latest value
+  useEffect(() => { pendingRequestRef.current = pendingRequest }, [pendingRequest])
 
   useEffect(() => {
     fetchDriverDetails()
     checkActiveRide()
     fetchTodayStats()
+    // Always subscribe — even if offline, so going online shows requests
+    subscribeToRequests()
 
     return () => {
       clearInterval(locationInterval.current)
-      clearTimeout(requestTimeout.current)
       clearInterval(timerRef.current)
+      if (channelRef.current) supabase.removeChannel(channelRef.current)
     }
   }, [])
 
-  useEffect(() => {
-    if (!driverDetails) return
-    setIsAvailable(driverDetails.is_available)
-
-    if (driverDetails.is_available) {
-      startLocationTracking()
-      subscribeToRequests()
-    } else {
-      clearInterval(locationInterval.current)
-    }
-  }, [driverDetails])
-
   async function fetchDriverDetails() {
     const { data } = await supabase.from('driver_details').select('*').eq('id', profile.id).single()
-    setDriverDetails(data)
+    if (data) {
+      setDriverDetails(data)
+      setIsAvailable(data.is_available)
+      if (data.is_available) startLocationTracking()
+    }
   }
 
   async function checkActiveRide() {
-    const { data } = await supabase.from('rides').select('*').eq('driver_id', profile.id)
+    const { data } = await supabase.from('rides').select('*')
+      .eq('driver_id', profile.id)
       .in('status', ['driver_assigned', 'otp_verified', 'in_progress'])
-      .order('created_at', { ascending: false }).limit(1).single()
-    if (data) navigate(`/ride/${data.id}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (data?.length > 0) navigate(`/ride/${data[0].id}`)
   }
 
   async function fetchTodayStats() {
@@ -64,47 +64,48 @@ export default function DriverHome() {
     setTodayEarnings(data?.reduce((s, r) => s + (r.fare || 0), 0) || 0)
   }
 
-  function startLocationTracking() {
-    if (!navigator.geolocation) return
-    updateLocation()
-    locationInterval.current = setInterval(updateLocation, 10000) // every 10s
-  }
-
-  function updateLocation() {
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { latitude, longitude } = pos.coords
-      await supabase.from('driver_details').update({
-        current_lat: latitude,
-        current_lng: longitude,
-        last_location_update: new Date().toISOString()
-      }).eq('id', profile.id)
-    }, null, { enableHighAccuracy: true })
-  }
-
   function subscribeToRequests() {
-    const sub = supabase
-      .channel(`driver-requests-${profile.id}`)
+    // Remove any existing channel first
+    if (channelRef.current) supabase.removeChannel(channelRef.current)
+
+    channelRef.current = supabase
+      .channel(`driver-req-${profile.id}-${Date.now()}`)
       .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'ride_requests',
+        event: 'INSERT',
+        schema: 'public',
+        table: 'ride_requests',
         filter: `driver_id=eq.${profile.id}`
       }, async (payload) => {
-        if (pendingRequest) return // already have a request
+        console.log('New ride request received:', payload.new)
+        if (pendingRequestRef.current) {
+          console.log('Already have a pending request, ignoring')
+          return
+        }
         await loadRideRequest(payload.new)
       })
-      .subscribe()
-    return () => sub.unsubscribe()
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status)
+      })
   }
 
   async function loadRideRequest(request) {
-    const { data: ride } = await supabase.from('rides').select('*, profiles!rides_student_id_fkey(full_name, avatar_url)')
-      .eq('id', request.ride_id).single()
-    if (!ride || ride.status !== 'searching') return
+    const { data: ride, error } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('id', request.ride_id)
+      .single()
+
+    console.log('Loaded ride for request:', ride, error)
+    if (!ride || ride.status !== 'searching') {
+      console.log('Ride not in searching state:', ride?.status)
+      return
+    }
 
     setPendingRequest(request)
     setRideData(ride)
-    
-    // 20 second countdown
     setRequestTimer(20)
+
+    clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
       setRequestTimer(t => {
         if (t <= 1) {
@@ -117,12 +118,52 @@ export default function DriverHome() {
     }, 1000)
   }
 
+  function startLocationTracking() {
+    if (!navigator.geolocation) return
+    updateLocation()
+    clearInterval(locationInterval.current)
+    locationInterval.current = setInterval(updateLocation, 10000)
+  }
+
+  function updateLocation() {
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords
+      await supabase.from('driver_details').update({
+        current_lat: latitude,
+        current_lng: longitude,
+        last_location_update: new Date().toISOString()
+      }).eq('id', profile.id)
+    }, (err) => console.log('Geolocation error:', err), { enableHighAccuracy: true })
+  }
+
+  async function toggleAvailability() {
+    setToggling(true)
+    const newState = !isAvailable
+    const { error } = await supabase.from('driver_details')
+      .update({ is_available: newState })
+      .eq('id', profile.id)
+
+    if (!error) {
+      setIsAvailable(newState)
+      if (newState) {
+        startLocationTracking()
+      } else {
+        clearInterval(locationInterval.current)
+      }
+    }
+    setToggling(false)
+  }
+
   async function acceptRequest() {
     if (!pendingRequest || !rideData) return
     clearInterval(timerRef.current)
 
     await supabase.from('ride_requests').update({ status: 'accepted' }).eq('id', pendingRequest.id)
-    await supabase.from('rides').update({ status: 'driver_assigned', driver_id: profile.id, accepted_at: new Date().toISOString() }).eq('id', rideData.id)
+    await supabase.from('rides').update({
+      status: 'driver_assigned',
+      driver_id: profile.id,
+      accepted_at: new Date().toISOString()
+    }).eq('id', rideData.id)
     await supabase.from('driver_details').update({ is_available: false }).eq('id', profile.id)
 
     navigate(`/ride/${rideData.id}`)
@@ -131,23 +172,13 @@ export default function DriverHome() {
   async function rejectRequest(request = pendingRequest, expired = false) {
     clearInterval(timerRef.current)
     if (request) {
-      await supabase.from('ride_requests').update({ status: expired ? 'expired' : 'rejected' }).eq('id', request.id)
+      await supabase.from('ride_requests')
+        .update({ status: expired ? 'expired' : 'rejected' })
+        .eq('id', request.id)
     }
     setPendingRequest(null)
     setRideData(null)
     setRequestTimer(0)
-  }
-
-  async function toggleAvailability() {
-    setToggling(true)
-    const newState = !isAvailable
-    await supabase.from('driver_details').update({ is_available: newState }).eq('id', profile.id)
-    setIsAvailable(newState)
-    
-    if (newState) startLocationTracking()
-    else clearInterval(locationInterval.current)
-    
-    setToggling(false)
   }
 
   return (
@@ -163,24 +194,24 @@ export default function DriverHome() {
             <div className="label" style={{ marginBottom: '2px' }}>Driver</div>
             <h2 className="headline">{profile?.full_name?.split(' ')[0]}</h2>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span className={`badge ${isAvailable ? 'badge-green' : 'badge-red'}`}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }}/>
-              {isAvailable ? 'Online' : 'Offline'}
-            </span>
-          </div>
+          <span className={`badge ${isAvailable ? 'badge-green' : 'badge-red'}`}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'currentColor' }}/>
+            {isAvailable ? 'Online' : 'Offline'}
+          </span>
         </div>
       </div>
 
-      {/* Scrollable */}
+      {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-        {/* Go online/offline toggle */}
+        {/* Toggle button */}
         <button
           onClick={toggleAvailability}
           disabled={toggling}
           style={{
             width: '100%',
-            background: isAvailable ? 'rgba(255,82,82,0.1)' : 'linear-gradient(135deg, var(--green) 0%, var(--green-dim) 100%)',
+            background: isAvailable
+              ? 'rgba(255,82,82,0.1)'
+              : 'linear-gradient(135deg, var(--green) 0%, var(--green-dim) 100%)',
             border: isAvailable ? '1px solid rgba(255,82,82,0.3)' : 'none',
             borderRadius: 'var(--radius-lg)',
             padding: '28px 20px',
@@ -216,14 +247,14 @@ export default function DriverHome() {
             <div className="caption">Today's earnings</div>
           </div>
           <div className="card" style={{ textAlign: 'center' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: '800', color: 'var(--text-primary)' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: '800' }}>
               {todayRides}
             </div>
             <div className="caption">Rides today</div>
           </div>
         </div>
 
-        {/* Vehicle info */}
+        {/* Vehicle */}
         {driverDetails && (
           <div className="card">
             <div className="label" style={{ marginBottom: '12px' }}>Vehicle</div>
@@ -238,7 +269,7 @@ export default function DriverHome() {
         )}
       </div>
 
-      {/* Bottom */}
+      {/* Sign out */}
       <div style={{
         padding: '12px 20px',
         paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
@@ -251,7 +282,7 @@ export default function DriverHome() {
 
       {/* Ride request overlay */}
       {pendingRequest && rideData && (
-        <div className="overlay" onClick={(e) => e.target === e.currentTarget && rejectRequest()}>
+        <div className="overlay">
           <div className="bottom-sheet slide-up" style={{ width: '100%', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div className="title">New Ride Request</div>
@@ -269,7 +300,6 @@ export default function DriverHome() {
               </div>
             </div>
 
-            {/* Route */}
             <div className="card" style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', gap: '12px', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '2px' }}>
@@ -277,7 +307,7 @@ export default function DriverHome() {
                   <div style={{ width: '1px', height: '30px', background: 'var(--border)', margin: '4px 0' }}/>
                   <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--danger)' }}/>
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '14px', marginBottom: '14px', color: 'var(--text-secondary)' }}>
                     {rideData.pickup_address?.split(',').slice(0, 2).join(',')}
                   </div>
@@ -302,10 +332,9 @@ export default function DriverHome() {
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '800' }}>
-                    {driverDetails?.current_lat ? getDistanceKm(
-                      driverDetails.current_lat, driverDetails.current_lng,
-                      rideData.pickup_lat, rideData.pickup_lng
-                    ).toFixed(1) : '—'}
+                    {driverDetails?.current_lat
+                      ? getDistanceKm(driverDetails.current_lat, driverDetails.current_lng, rideData.pickup_lat, rideData.pickup_lng).toFixed(1)
+                      : '—'}
                   </div>
                   <div className="caption">km away</div>
                 </div>
