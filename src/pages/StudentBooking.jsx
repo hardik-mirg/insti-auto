@@ -3,7 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import LocationSearch from '../components/LocationSearch'
-import { calculateFare, getDistanceKm, getFareBreakdown, isNightTime } from '../utils/fare'
+import { calculateFare, getDistanceKm, getFareBreakdown, isNightTime, isWithinCampus, IITB_LOCATIONS } from '../utils/fare'
+
+function findNearestLocation(lat, lng) {
+  let nearest = IITB_LOCATIONS[0]
+  let minDist = Infinity
+  for (const loc of IITB_LOCATIONS) {
+    const d = getDistanceKm(lat, lng, loc.lat, loc.lng)
+    if (d < minDist) { minDist = d; nearest = loc }
+  }
+  return nearest.name
+}
 
 export default function StudentBooking() {
   const { profile } = useAuth()
@@ -18,9 +28,7 @@ export default function StudentBooking() {
   useEffect(() => {
     if (pickup && drop) {
       const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
-      // Add ~15% for actual road distance vs straight line
-      const roadDist = dist * 1.15
-      setFareInfo(getFareBreakdown(roadDist))
+      setFareInfo(getFareBreakdown(dist))
     } else {
       setFareInfo(null)
     }
@@ -28,18 +36,6 @@ export default function StudentBooking() {
 
   function geolocate() {
     setLocating(true)
-
-    async function reverseGeocode(lat, lng) {
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
-        )
-        const data = await res.json()
-        return data.display_name?.split(',').slice(0, 3).join(', ') || 'Current location'
-      } catch {
-        return 'Current location'
-      }
-    }
 
     // Step 1 — get coarse location fast (WiFi/cell), show it immediately
     navigator.geolocation.getCurrentPosition(

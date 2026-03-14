@@ -1,65 +1,48 @@
-import { useState, useRef, useEffect } from 'react'
-import { IITB_LOCATIONS } from '../utils/fare'
+import { useState, useRef } from 'react'
+import { IITB_LOCATIONS, isWithinCampus } from '../utils/fare'
 
 export default function LocationSearch({ label, value, onSelect, placeholder, icon }) {
   const [query, setQuery] = useState(value?.address || '')
   const [results, setResults] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const debounceRef = useRef(null)
-
-  useEffect(() => {
-    if (value?.address && query !== value.address) setQuery(value.address)
-  }, [value])
 
   function handleChange(e) {
     const q = e.target.value
     setQuery(q)
-    
-    if (!q.trim()) { setResults([]); setShowDropdown(false); return }
-    
-    // Filter IITB locations first
-    const iitbMatches = IITB_LOCATIONS.filter(l =>
-      l.name.toLowerCase().includes(q.toLowerCase())
-    ).map(l => ({ display_name: l.name, lat: l.lat, lon: l.lng, isPreset: true }))
 
-    if (iitbMatches.length > 0) {
-      setResults(iitbMatches.slice(0, 4))
-      setShowDropdown(true)
+    if (!q.trim()) {
+      setResults([])
+      setShowDropdown(false)
+      return
     }
 
-    // Also search Nominatim with debounce
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => searchNominatim(q, iitbMatches), 400)
+    const matches = IITB_LOCATIONS.filter(l =>
+      l.name.toLowerCase().includes(q.toLowerCase()) ||
+      l.category.toLowerCase().includes(q.toLowerCase())
+    )
+
+    setResults(matches.slice(0, 8))
+    setShowDropdown(matches.length > 0)
   }
 
-  async function searchNominatim(q, existing = []) {
-    if (!q.trim() || q.length < 3) return
-    setLoading(true)
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ' Mumbai')}&format=json&limit=4&countrycodes=in`,
-        { headers: { 'Accept-Language': 'en' } }
-      )
-      const data = await res.json()
-      const combined = [...existing, ...data.map(r => ({
-        display_name: r.display_name.split(',').slice(0, 2).join(', '),
-        full_name: r.display_name,
-        lat: parseFloat(r.lat),
-        lon: parseFloat(r.lon),
-        isPreset: false
-      }))].slice(0, 6)
-      setResults(combined)
-      setShowDropdown(true)
-    } catch (e) {}
-    setLoading(false)
-  }
-
-  function select(result) {
-    const addr = result.display_name
-    setQuery(addr)
+  function select(location) {
+    setQuery(location.name)
     setShowDropdown(false)
-    onSelect({ address: addr, lat: parseFloat(result.lat), lng: parseFloat(result.lon) })
+    onSelect({ address: location.name, lat: location.lat, lng: location.lng })
+  }
+
+  function clear() {
+    setQuery('')
+    setResults([])
+    setShowDropdown(false)
+    onSelect(null)
+  }
+
+  const categoryEmoji = {
+    Gate: '🚧',
+    Hostel: '🏠',
+    Academic: '🎓',
+    Facility: '🏛️',
   }
 
   return (
@@ -70,66 +53,94 @@ export default function LocationSearch({ label, value, onSelect, placeholder, ic
         <input
           value={query}
           onChange={handleChange}
-          onFocus={() => query && setShowDropdown(true)}
+          onFocus={() => {
+            if (query) {
+              handleChange({ target: { value: query } })
+            } else {
+              // Show all locations on focus if empty
+              setResults(IITB_LOCATIONS.slice(0, 8))
+              setShowDropdown(true)
+            }
+          }}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
           placeholder={placeholder}
-          style={{ paddingLeft: '42px' }}
+          style={{ paddingLeft: '42px', paddingRight: query ? '36px' : '14px' }}
         />
-        {loading && (
-          <div style={{ position: 'absolute', right: '14px' }}>
-            <div className="spinner" style={{ width: '14px', height: '14px' }}/>
-          </div>
+        {query && (
+          <button
+            onMouseDown={clear}
+            style={{
+              position: 'absolute', right: '10px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', padding: '4px', display: 'flex'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         )}
       </div>
-      
+
       {showDropdown && results.length > 0 && (
         <div style={{
-          position: 'absolute',
-          top: '100%',
+          position: 'absolute', top: 'calc(100% + 4px)',
           left: 0, right: 0,
-          marginTop: '4px',
           background: 'var(--bg-elevated)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-sm)',
           overflow: 'hidden',
-          zIndex: 50,
-          boxShadow: 'var(--shadow)'
+          zIndex: 200,
+          boxShadow: 'var(--shadow)',
+          maxHeight: '240px',
+          overflowY: 'auto'
         }}>
-          {results.map((r, i) => (
+          {results.map((loc, i) => (
             <button
               key={i}
-              onMouseDown={() => select(r)}
+              onMouseDown={() => select(loc)}
               style={{
-                width: '100%',
-                padding: '11px 14px',
-                textAlign: 'left',
-                background: 'transparent',
+                width: '100%', padding: '10px 14px',
+                textAlign: 'left', background: 'transparent',
                 border: 'none',
                 borderBottom: i < results.length - 1 ? '1px solid var(--border)' : 'none',
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                transition: 'background 0.15s'
+                display: 'flex', alignItems: 'center', gap: '10px',
+                transition: 'background 0.1s'
               }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-overlay)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <span style={{ fontSize: '16px', flexShrink: 0 }}>
-                {r.isPreset ? '⭐' : '📍'}
+                {categoryEmoji[loc.category] || '📍'}
               </span>
               <div>
-                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: r.isPreset ? '600' : '400' }}>
-                  {r.display_name}
+                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>
+                  {loc.name}
                 </div>
-                {r.full_name && r.full_name !== r.display_name && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
-                    {r.full_name.split(',').slice(2, 4).join(',')}
-                  </div>
-                )}
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
+                  {loc.category} · IIT Bombay
+                </div>
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {showDropdown && results.length === 0 && query.length > 0 && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)',
+          left: 0, right: 0,
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '14px',
+          zIndex: 200,
+          textAlign: 'center',
+          fontSize: '13px',
+          color: 'var(--text-muted)'
+        }}>
+          No campus locations found for "{query}"
         </div>
       )}
     </div>
