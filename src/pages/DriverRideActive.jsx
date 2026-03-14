@@ -246,7 +246,7 @@ export default function DriverRideActive() {
 
       {/* Map — fills entire screen */}
       <div style={{ flex: 1, position: 'relative' }}>
-        <div ref={mapRef} style={{ width: '100%', height: '100%', touchAction: 'none' }}/>
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
       </div>
 
       {/* Bottom sheet */}
@@ -255,8 +255,7 @@ export default function DriverRideActive() {
         borderRadius: '24px 24px 0 0', padding: '8px 20px',
         paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
         maxHeight: '55vh', overflow: 'auto',
-        position: 'relative', zIndex: 10,
-        touchAction: 'pan-y'
+        position: 'relative', zIndex: 10
       }}>
         <div style={{ width: '36px', height: '4px', background: 'var(--border)', borderRadius: '2px', margin: '8px auto 16px' }}/>
 

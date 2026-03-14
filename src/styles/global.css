@@ -240,11 +240,6 @@ input::placeholder { color: var(--text-muted); }
   position: relative;
 }
 
-/* Leaflet touch fix */
-.leaflet-container {
-  touch-action: none;
-}
-
 /* Safe area for mobile */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
 .safe-top { padding-top: env(safe-area-inset-top, 0px); }
