@@ -1,6 +1,9 @@
 // InstiAuto Service Worker
 // Handles push notifications and caches app shell
 
+// Required by vite-plugin-pwa injectManifest strategy
+self.__WB_MANIFEST
+
 self.addEventListener('install', (event) => {
   self.skipWaiting()
 })
