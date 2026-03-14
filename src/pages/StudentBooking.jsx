@@ -25,6 +25,27 @@ export default function StudentBooking() {
   const [booking, setBooking] = useState(false)
   const [step, setStep] = useState('select') // select | confirm
 
+  // Pre-warm location permission on mount so it's instant when user taps the button
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.permissions?.query({ name: 'geolocation' }).then(result => {
+        if (result.state === 'granted') {
+          // Already granted — silently fetch and prefill pickup
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const { latitude: lat, longitude: lng } = pos.coords
+              setPickup({ lat, lng, address: findNearestLocation(lat, lng) })
+            },
+            () => {},
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          )
+        }
+        // If 'prompt' — don't ask yet, wait for user to tap the button
+        // If 'denied' — do nothing
+      })
+    }
+  }, [])
+
   useEffect(() => {
     if (pickup && drop) {
       const dist = getDistanceKm(pickup.lat, pickup.lng, drop.lat, drop.lng)
@@ -39,9 +60,7 @@ export default function StudentBooking() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
-        console.log('Geolocation success:', lat, lng)
         const addr = findNearestLocation(lat, lng)
-        console.log('Nearest location:', addr)
         setPickup({ lat, lng, address: addr })
         setLocating(false)
       },
