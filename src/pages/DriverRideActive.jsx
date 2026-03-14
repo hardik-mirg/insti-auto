@@ -273,8 +273,30 @@ export default function DriverRideActive() {
                 : ride?.drop_address?.split(',')[0]}
             </div>
           </div>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: '800', color: 'var(--green)', fontSize: '18px' }}>
-            ₹{ride?.fare?.toFixed(0)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: '800', color: 'var(--green)', fontSize: '18px' }}>
+              ₹{ride?.fare?.toFixed(0)}
+            </div>
+            {ride && (
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${isPickupPhase ? ride.pickup_lat : ride.drop_lat},${isPickupPhase ? ride.pickup_lng : ride.drop_lng}&travelmode=driving`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  background: 'var(--green)', color: '#000',
+                  borderRadius: '8px', padding: '5px 8px',
+                  fontSize: '11px', fontWeight: '700',
+                  textDecoration: 'none',
+                  display: 'flex', alignItems: 'center', gap: '3px',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                Navigate
+              </a>
+            )}
           </div>
         </div>
       </div>
