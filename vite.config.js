@@ -8,12 +8,12 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: { enabled: true },
-      // Use our custom SW instead of Workbox auto-generated one
-      strategies: 'injectManifest',
-      srcDir: 'public',
-      filename: 'sw.js',
+      strategies: 'generateSW',
       workbox: {
         runtimeCaching: [],
+        navigateFallback: 'index.html',
+        // Import push notification handler into the generated SW
+        importScripts: ['/push-sw.js'],
       },
       manifest: {
         name: 'InstiAuto',

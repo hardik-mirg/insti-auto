@@ -16,35 +16,28 @@ function urlBase64ToUint8Array(base64String) {
 
 export async function subscribeToPush(userId) {
   try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.log('Push not supported')
-      return false
-    }
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
 
-    // Register our custom SW
-    const reg = await navigator.serviceWorker.register('/sw.js')
-    await navigator.serviceWorker.ready
-
-    // Request permission
     const permission = await Notification.requestPermission()
-    if (permission !== 'granted') {
-      console.log('Push permission denied')
-      return false
-    }
+    if (permission !== 'granted') return false
 
-    // Subscribe
+    // Get the existing SW registration (registered by vite-plugin-pwa)
+    const reg = await navigator.serviceWorker.ready
+
+    // Import our push handler into the existing SW
+    await reg.active?.postMessage({ type: 'IMPORT_PUSH_SW' })
+
     const subscription = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     })
 
-    // Save to Supabase
     const { error } = await supabase.from('push_subscriptions').upsert({
       user_id: userId,
       subscription: subscription.toJSON()
     }, { onConflict: 'user_id' })
 
-    if (error) console.error('Failed to save subscription:', error)
+    if (error) console.error('Failed to save push subscription:', error)
     else console.log('Push subscription saved!')
     return true
   } catch (e) {
@@ -68,11 +61,9 @@ export async function sendPushToUser(userId, title, body) {
   }
 }
 
-// Hook — call in App or page components to auto-subscribe
 export function usePushNotifications(userId) {
   useEffect(() => {
     if (!userId) return
-    // Auto-subscribe when user is logged in
     subscribeToPush(userId)
   }, [userId])
 }
