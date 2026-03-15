@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import LocationSearch from '../components/LocationSearch'
 import { calculateFare, getDistanceKm, getFareBreakdown, isNightTime, isWithinCampus, IITB_LOCATIONS } from '../utils/fare'
-import { sendPushToUser } from '../hooks/usePush'
 
 function findNearestLocation(lat, lng) {
   let nearest = IITB_LOCATIONS[0]
@@ -139,13 +138,8 @@ export default function StudentBooking() {
     }
 
     // Trigger driver search via Supabase function (or handle client-side)
-    const driverIds = await notifyNearbyDrivers(data.id, pickup)
-    // Push notify each driver
-    if (driverIds?.length) {
-      for (const driverId of driverIds) {
-        sendPushToUser(driverId, '🛺 New Ride Request!', `₹${fareInfo.total.toFixed(0)} · ${pickup.address?.split(',')[0]} → ${drop.address?.split(',')[0]}`)
-      }
-    }
+    await notifyNearbyDrivers(data.id, pickup)
+
     navigate(`/ride/${data.id}`)
   }
 
@@ -186,7 +180,6 @@ export default function StudentBooking() {
         status: 'pending'
       }))
     )
-    return driversToNotify.map(d => d.profiles.id)
   }
 
   return (

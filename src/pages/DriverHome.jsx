@@ -3,12 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getDistanceKm } from '../utils/fare'
-import { usePushNotifications, sendPushToUser } from '../hooks/usePush'
 
 export default function DriverHome() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
-  usePushNotifications(profile?.id)
   const [isAvailable, setIsAvailable] = useState(false)
   const [driverDetails, setDriverDetails] = useState(null)
   const [pendingRequest, setPendingRequest] = useState(null)
@@ -239,8 +237,6 @@ export default function DriverHome() {
 
     await supabase.from('ride_requests').update({ status: 'accepted' }).eq('id', pendingRequest.id)
     await supabase.from('driver_details').update({ is_available: false }).eq('id', profile.id)
-    // Notify student that driver accepted
-    await sendPushToUser(rideData.student_id, '🛺 Driver Accepted!', `Your driver is on the way. Share your OTP when they arrive.`)
     navigate(`/ride/${rideData.id}`)
   }
 

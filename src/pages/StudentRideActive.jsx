@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { getDistanceKm } from '../utils/fare'
-import { usePushNotifications, sendPushToUser } from '../hooks/usePush'
 
 const STATUS_LABELS = {
   searching: { text: 'Finding your driver', color: 'var(--warning)', icon: '🔍' },
@@ -18,7 +17,6 @@ export default function StudentRideActive() {
   const { rideId } = useParams()
   const { profile } = useAuth()
   const navigate = useNavigate()
-  usePushNotifications(profile?.id)
   const [ride, setRide] = useState(null)
   const [driver, setDriver] = useState(null)
   const [driverDetails, setDriverDetails] = useState(null)
@@ -302,8 +300,6 @@ export default function StudentRideActive() {
 
   async function cancelRide() {
     await supabase.from('rides').update({ status: 'cancelled' }).eq('id', rideId)
-    // Notify driver
-    if (ride?.driver_id) await sendPushToUser(ride.driver_id, '❌ Ride Cancelled', 'The student has cancelled the ride.')
     navigate('/')
   }
 
