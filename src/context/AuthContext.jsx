@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
     setProfile(null)
   }
 
-  async function createProfile(role) {
+  async function createProfile(role, phone = null) {
     if (!user) return
     const otp = role === 'student'
       ? String(Math.floor(1000 + Math.random() * 9000))
@@ -76,6 +76,7 @@ export function AuthProvider({ children }) {
       avatar_url: user.user_metadata?.avatar_url,
       role,
       otp_pin: otp,
+      phone,
     }).select().single()
 
     if (!error) {
